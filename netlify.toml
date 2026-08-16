@@ -1,0 +1,8 @@
+[build]
+  command = "bun run build:static && mv dist-static/spa/index.html dist-static/index.html && rmdir dist-static/spa"
+  publish = "dist-static"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
