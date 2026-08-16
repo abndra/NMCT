@@ -1,0 +1,92 @@
+/**
+ * Demo catalogue for NMCT — categories, products and digital code inventory.
+ * Images use the `/__l5e/<file>` pointer format resolved by `resolveImage`,
+ * so the same records work in dev and in production builds.
+ */
+export const demoCategories = {
+  "cat-esim": {
+    name: "شرائح إلكترونية eSIM",
+    nameEn: "eSIM Cards",
+    image: "/__l5e/cat-esim.jpg",
+    hidden: false,
+  },
+  "cat-apps": {
+    name: "تطبيقات وحسابات",
+    nameEn: "Apps & Accounts",
+    image: "/__l5e/cat-apps.jpg",
+    hidden: false,
+  },
+} as const;
+
+/* No demo codes: digital stock must be entered by the admin in the dashboard,
+   so a customer can never receive an auto-generated/fake code. */
+
+export const demoProducts = {
+  "p-esim-3": {
+    name: "شريحة eSIM 3 أيام لا محدود",
+    nameEn: "eSIM 3 Days Unlimited",
+    price: 3,
+    oldPrice: 5,
+    platform: "eSIM",
+    categoryId: "cat-esim",
+    soldCount: 48,
+    featured: true,
+    hidden: false,
+    digital: true,
+    lowStockAt: 5,
+    codes: [],
+    image: "/__l5e/p-esim-3.jpg",
+    description: "إنترنت لا محدود لمدة 3 أيام، تفعيل فوري عبر رمز QR يصلك على الواتساب بعد قبول الطلب.",
+    descriptionEn: "Unlimited data for 3 days, instant QR activation sent on WhatsApp.",
+  },
+  "p-esim-30": {
+    name: "شريحة eSIM 30 يوم لا محدود",
+    nameEn: "eSIM 30 Days Unlimited",
+    price: 9,
+    oldPrice: 13,
+    platform: "eSIM",
+    categoryId: "cat-esim",
+    soldCount: 63,
+    featured: true,
+    hidden: false,
+    digital: true,
+    lowStockAt: 4,
+    codes: [],
+    image: "/__l5e/p-esim-30.jpg",
+    description: "باقة شهرية لا محدودة بسرعة عالية، تعمل على جميع الأجهزة الداعمة لـ eSIM.",
+    descriptionEn: "Unlimited monthly high-speed plan for all eSIM-ready devices.",
+  },
+  "p-ios-plus": {
+    name: "تطبيقات iOS Plus",
+    nameEn: "iOS Plus Apps",
+    price: 4,
+    platform: "iOS",
+    categoryId: "cat-apps",
+    soldCount: 37,
+    featured: true,
+    hidden: false,
+    digital: true,
+    lowStockAt: 5,
+    codes: [],
+    image: "/__l5e/p-ios-plus.jpg",
+    description: "نسخ بلس للتطبيقات على الآيفون بدون جيلبريك، مع كود التفعيل يصلك فوراً.",
+    descriptionEn: "Plus versions of iPhone apps, no jailbreak, instant activation code.",
+  },
+  "p-account": {
+    name: "حسابات ترفيه مميزة",
+    nameEn: "Premium Accounts",
+    price: 6,
+    oldPrice: 8,
+    platform: "Digital",
+    categoryId: "cat-apps",
+    soldCount: 29,
+    featured: true,
+    hidden: false,
+    digital: true,
+    lowStockAt: 3,
+    codes: [],
+    image: "/__l5e/p-account.jpg",
+    description: "حساب اشتراك مميز يصلك ببياناته مباشرة على الواتساب بعد قبول الطلب.",
+    descriptionEn: "Premium subscription account delivered on WhatsApp after approval.",
+  },
+} as const;
