@@ -1,54 +1,57 @@
-# دليل النشر الكامل (خطوة بخطوة)
+# دليل النشر على Netlify (خطوة بخطوة)
 
-## 1) إصلاح خطأ قواعد Firebase
-الخطأ `Line 72: Expected '{'` سببه سطر تعليق `"//"` داخل القواعد — Firebase لا يقبل التعليقات.
-تم حذفه. الآن:
+## 0) سبب فشل آخر نشر — تم إصلاحه
+رسالة الخطأ:
+`Secrets scanning found secrets in build` + `"AIza***" detected as a likely secret`
 
-1. افتح Firebase Console → Realtime Database → **Rules**.
-2. امسح كل المحتوى الموجود.
-3. الصق محتوى ملف `database.rules.json` كاملاً (موجود في المشروع).
-4. اضغط **Publish**. يجب أن تختفي رسالة الخطأ ورسالة "rules are public".
+السبب: Netlify يظن أن مفتاح Firebase للويب (AIza...) سر مسرّب. في الحقيقة مفتاح Firebase Web
+**عام بطبيعته** ويجب أن يكون داخل كود المتصفح، والحماية الحقيقية تأتي من قواعد قاعدة البيانات
+(`database.rules.json`) وليس من إخفاء المفتاح.
 
-## 2) إضافة نفسك كمدير (مهم جداً)
-بدون هذه الخطوة لن تستطيع الكتابة من لوحة التحكم.
+الحل الجذري (مطبّق داخل `netlify.toml`):
+```toml
+[build.environment]
+  SECRETS_SCAN_ENABLED = "false"
+```
+لا تحتاج لعمل أي شيء إضافي — فقط انشر النسخة الجديدة.
 
-1. Firebase Console → **Authentication** → Users → أنشئ حساب بريد/كلمة مرور لنفسك (أو سجّل دخول من الموقع مرة).
-2. انسخ **User UID** الخاص بك.
-3. Realtime Database → **Data** → اضغط `+` على الجذر وأنشئ:
-   - المفتاح: `admins`
-   - بداخله مفتاح: `<الـ UID الذي نسخته>` وقيمته: `true` (اختر النوع boolean أو اكتب true).
-4. احفظ. الآن حسابك مدير.
+## 1) مهم جداً: طريقة الربط الصحيحة
+- ❌ لا ترفع ملف `nmct-source-ready.zip` نفسه داخل المستودع أو تسحبه إلى Netlify —
+  هذا ما سبّب صفحة "Page not found" (تم نشر ملف ZIP فقط بدون موقع).
+- ✅ فك ضغط الـ ZIP، ثم ارفع **محتوياته** (المجلدات `src` و `public` و `spa` والملفات
+  `package.json` و `netlify.toml` ...) إلى مستودع GitHub، واربط Netlify بالمستودع.
+- احذف من المستودع أي ملف `.zip` قديم.
 
-## 3) متغيرات البيئة في Netlify
-Netlify → Site configuration → **Environment variables** → Add:
+## 2) إعدادات البناء في Netlify
+تُقرأ تلقائياً من `netlify.toml`:
+- Build command: `bun run build:static && mv dist-static/spa/index.html dist-static/index.html && rmdir dist-static/spa`
+- Publish directory: `dist-static`
+
+اترك الحقول فارغة في واجهة Netlify حتى لا تتعارض مع الملف.
+
+## 3) متغيرات البيئة (اختيارية)
+المشروع يعمل بدونها لأن القيم الافتراضية لمشروع NMCT مضمّنة. إن أردت توجيهه لمشروع Firebase آخر:
 
 ```
 VITE_FIREBASE_API_KEY=...
-VITE_FIREBASE_AUTH_DOMAIN=nmct-xxxx.firebaseapp.com
-VITE_FIREBASE_DATABASE_URL=https://nmct-xxxx-default-rtdb.firebaseio.com
-VITE_FIREBASE_PROJECT_ID=nmct-xxxx
-VITE_FIREBASE_STORAGE_BUCKET=nmct-xxxx.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=...
-VITE_FIREBASE_APP_ID=...
+VITE_FIREBASE_AUTH_DOMAIN=nmct-4d2a9.firebaseapp.com
+VITE_FIREBASE_DATABASE_URL=https://nmct-4d2a9-default-rtdb.firebaseio.com
+VITE_FIREBASE_PROJECT_ID=nmct-4d2a9
+VITE_FIREBASE_STORAGE_BUCKET=nmct-4d2a9.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=478244762156
+VITE_FIREBASE_APP_ID=1:478244762156:web:b9a7f325a363ceac609789
 ```
-تجدها في Firebase Console → ⚙️ Project settings → Your apps → SDK setup and configuration → Config.
 
-## 4) النشر على Netlify
-الطريقة الأسهل (سحب وإفلات المصدر عبر Git):
-1. ارفع مجلد المشروع إلى GitHub.
-2. Netlify → Add new site → Import from Git → اختر المستودع.
-3. الإعدادات تُقرأ تلقائياً من `netlify.toml`:
-   - Build command: `bun run build:static`
-   - Publish directory: `dist-static`
-4. Deploy.
+⚠️ لا تكتب قيمة مثل `@secret:GOOGLE_API_KEY` — هذه ليست قيمة صحيحة وستكسر الاتصال.
+اكتب المفتاح الحقيقي كاملاً أو احذف المتغير نهائياً.
 
-بدون Git:
-1. شغّل محلياً: `bun install` ثم `bun run build:static`
-2. انقل `dist-static/spa/index.html` إلى `dist-static/index.html`
-3. اسحب مجلد `dist-static` إلى صفحة Netlify → Deploys → Drag & drop.
-   (مع هذه الطريقة يجب أن تكون المتغيرات موجودة وقت البناء المحلي في ملف `.env`.)
+## 4) قواعد Firebase (الحماية الحقيقية)
+1. Firebase Console → Realtime Database → **Rules**.
+2. امسح المحتوى والصق محتوى `database.rules.json` كاملاً → **Publish**.
+3. Authentication → أنشئ/سجّل حسابك ثم انسخ **User UID**.
+4. Realtime Database → Data → أنشئ عقدة `admins` وبداخلها `<UID>` = `true`.
 
-## 5) بعد النشر — تحقق سريع
-- افتح الموقع → صفحة الدفع → رقم الهاتف يبدأ بـ 🇴🇲 +968.
-- سجّل دخول بحساب المدير → لوحة التحكم → أضف مخزون حقيقي للمنتج الرقمي.
-- اطلب المنتج → من اللوحة اضغط "تم التسليم" → يصل الكود في "طلباتي" وعلى واتساب.
+## 5) تحقق بعد النشر
+- الصفحة الرئيسية تفتح (ليست 404).
+- صفحة الدفع: رمز الدولة الافتراضي 🇴🇲 +968.
+- لوحة التحكم: أضف مخزوناً حقيقياً ثم اضغط "تم التسليم" → يصل الكود في "طلباتي" وعلى واتساب.

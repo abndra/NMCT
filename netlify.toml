@@ -2,6 +2,12 @@
   command = "bun run build:static && mv dist-static/spa/index.html dist-static/index.html && rmdir dist-static/spa"
   publish = "dist-static"
 
+# مفاتيح Firebase للويب هي مفاتيح عامة (publishable) ويجب أن تظهر في كود المتصفح.
+# لذلك نوقف فحص الأسرار في Netlify وإلا يفشل البناء برسالة "Secrets scanning found secrets in build".
+[build.environment]
+  SECRETS_SCAN_ENABLED = "false"
+  NODE_VERSION = "22"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
