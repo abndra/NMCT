@@ -23,6 +23,7 @@ import {
   deleteOrder,
   formatOrderNo,
   onOrdersChange,
+  claimAdmin,
   rejectOrder,
   restoreOrderStock,
   notifyOrderDelivered,
@@ -32,6 +33,7 @@ import {
   type Order,
 } from "@/lib/db";
 import { useI18n } from "@/lib/i18n";
+import { getFbAuth } from "@/lib/firebase";
 import { priceText } from "@/components/site/ProductCard";
 
 const card = "space-y-3 rounded-2xl border border-border bg-card p-4";
@@ -82,16 +84,43 @@ export function OrdersPanel() {
   const [filter, setFilter] = useState<string>("all");
   const [q, setQ] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [error, setError] = useState<string>("");
+  const [fixing, setFixing] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let unsub = () => {};
     try {
-      unsub = onOrdersChange(setOrders);
-    } catch {
-      /* ignore */
+      unsub = onOrdersChange(
+        (items) => {
+          setError("");
+          setOrders(items);
+        },
+        (err) => setError(String(err?.message || err)),
+      );
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
     }
     return () => unsub();
-  }, []);
+  }, [reload]);
+
+  async function fixPermissions() {
+    setFixing(true);
+    const uid = getFbAuth().currentUser?.uid;
+    const ok = await claimAdmin(uid);
+    setFixing(false);
+    if (ok) {
+      toast.success(lang === "ar" ? "تم تفعيل صلاحيات المدير" : "Admin access enabled");
+      setReload((n) => n + 1);
+    } else {
+      toast.error(
+        lang === "ar"
+          ? "تعذّر التفعيل تلقائياً — أضف admins/<UID> = true من Firebase Console"
+          : "Could not enable automatically — add admins/<UID> = true in Firebase Console",
+      );
+    }
+  }
+
 
   const counts = useMemo(() => {
     const map: Record<string, number> = { all: orders.length };
@@ -127,6 +156,37 @@ export function OrdersPanel() {
 
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4 text-sm">
+          <p className="font-display text-destructive">
+            {lang === "ar"
+              ? "تعذّر تحميل الطلبات — قواعد قاعدة البيانات ترفض القراءة لهذا الحساب."
+              : "Orders could not load — database rules deny read for this account."}
+          </p>
+          <p dir="ltr" className="mt-1 break-words font-tech text-xs text-muted-foreground">
+            {error}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={() => void fixPermissions()}
+              disabled={fixing}
+              className="rounded-xl bg-primary px-4 py-2 font-display text-primary-foreground disabled:opacity-60"
+            >
+              {lang === "ar" ? "تفعيل صلاحيات المدير" : "Enable admin access"}
+            </button>
+            <button
+              onClick={() => setReload((n) => n + 1)}
+              className="rounded-xl border border-border px-4 py-2 font-display"
+            >
+              {lang === "ar" ? "إعادة المحاولة" : "Retry"}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground" dir="ltr">
+            admins/{getFbAuth().currentUser?.uid || "<UID>"} = true
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           [lang === "ar" ? "كل الطلبات" : "Total", String(orders.length)],

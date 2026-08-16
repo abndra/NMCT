@@ -409,14 +409,24 @@ export function formatOrderNo(o: Pick<Order, "id" | "orderNumber">) {
     .toUpperCase();
 }
 
-export function onOrdersChange(cb: (items: Order[]) => void): Unsub {
-  return onValue(ref(getDb(), "orders"), (snap) => {
-    const items = listFromSnap<Order>(snap)
-      .filter((o) => o && typeof o === "object" && Array.isArray(o.items))
-      .map(normalizeOrder)
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    cb(items);
-  });
+export function onOrdersChange(
+  cb: (items: Order[]) => void,
+  onError?: (err: Error) => void,
+): Unsub {
+  return onValue(
+    ref(getDb(), "orders"),
+    (snap) => {
+      const items = listFromSnap<Order>(snap)
+        .filter((o) => o && typeof o === "object" && Array.isArray(o.items))
+        .map(normalizeOrder)
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      cb(items);
+    },
+    (err) => {
+      console.error("[orders] read failed:", err);
+      onError?.(err as Error);
+    },
+  );
 }
 
 export function onOrderChange(id: string, cb: (order: Order | null) => void): Unsub {
@@ -815,6 +825,37 @@ export async function isAdminUid(uid: string | undefined | null) {
     return false;
   }
 }
+
+/** True when the database rules recognise this account (admins/{uid} === true). */
+export async function isDbAdmin(uid: string | undefined | null) {
+  const id = String(uid || "").trim();
+  if (!id) return false;
+  try {
+    const snap = await get(ref(getDb(), "admins/" + id));
+    return snap.exists() && snap.val() === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Registers the current account inside `admins/{uid}` so the database rules
+ * allow reading orders and stock. Works for accounts already listed in
+ * ADMIN_UIDS / admin/uids, or as first-admin bootstrap when the node is empty.
+ */
+export async function claimAdmin(uid: string | undefined | null) {
+  const id = String(uid || "").trim();
+  if (!id) return false;
+  try {
+    await set(ref(getDb(), "admins/" + id), true);
+    return true;
+  } catch (e) {
+    console.error("[admins] claim failed:", e);
+    return false;
+  }
+}
+
+
 
 export async function adminLogin(key: string) {
   const snap = await get(ref(getDb(), "admin"));
