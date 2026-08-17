@@ -57,11 +57,17 @@ export function CartDrawer() {
                     </button>
                     <span className="font-tech text-sm">{l.qty}</span>
                     <button
-                      className="grid size-7 place-items-center rounded-lg border border-border"
+                      disabled={typeof l.max === "number" && l.qty >= l.max}
+                      className="grid size-7 place-items-center rounded-lg border border-border disabled:opacity-40"
                       onClick={() => setQty(k, l.qty + 1)}
                     >
                       <Plus className="size-3" />
                     </button>
+                    {typeof l.max === "number" && l.qty >= l.max && (
+                      <span className="font-tech text-[10px] text-destructive">
+                        {lang === "ar" ? `الحد الأقصى ${l.max}` : `Max ${l.max}`}
+                      </span>
+                    )}
                     <button
                       className="ms-auto text-destructive"
                       onClick={() => removeLine(k)}

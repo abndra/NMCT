@@ -13,7 +13,7 @@ export function priceText(v: number, lang: "ar" | "en") {
 }
 
 export function ProductCard({ product, rank }: { product: Product; rank?: number }) {
-  const { add, wishlist, toggleWish } = useCart();
+  const { add, wishlist, toggleWish, qtyOf } = useCart();
   const { requireAuth } = useAuth();
   const { t, lang } = useI18n();
   const { fmt } = useCurrency();
@@ -27,6 +27,8 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
   const left = availableStock(product);
   const soldOut = isOutOfStock(product);
   const low = isLowStock(product);
+  const inCart = qtyOf(product.id);
+  const full = !soldOut && inCart >= left;
 
   return (
     <article className="group relative overflow-hidden rounded-2xl glass-panel neon-hover">
@@ -87,12 +89,12 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
           </div>
           {!soldOut && low && (
             <p className="font-tech text-[11px] text-destructive">
-              {lang === "ar" ? `آخر ${left} قطع` : `Only ${left} left`}
+              {lang === "ar" ? `متبقي ${left} فقط` : `Only ${left} left`}
             </p>
           )}
           {!soldOut && !low && (
             <p className="font-tech text-[11px] text-primary/80">
-              {lang === "ar" ? `متوفر · ${left}` : `In stock · ${left}`}
+              {lang === "ar" ? `متبقي ${left}` : `${left} in stock`}
             </p>
           )}
           {!!product.soldCount && (
@@ -105,21 +107,41 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
 
       <div className="absolute inset-x-4 bottom-4 flex items-center gap-2">
         <button
-          disabled={soldOut}
+          disabled={soldOut || full}
           onClick={() => {
             if (soldOut) return;
+            if (full) {
+              toast.error(
+                lang === "ar"
+                  ? `الحد الأقصى المتوفر ${left}`
+                  : `Only ${left} available`,
+              );
+              return;
+            }
             requireAuth(() => {
-              add(product);
-              toast.success(t("added"));
+              if (add(product)) toast.success(t("added"));
+              else
+                toast.error(
+                  lang === "ar" ? `الحد الأقصى المتوفر ${left}` : `Only ${left} available`,
+                );
             });
           }}
           className={`inline-flex h-10 flex-1 items-center justify-center gap-1 rounded-xl font-display text-sm transition-transform ${
-            soldOut
+            soldOut || full
               ? "cursor-not-allowed border border-border bg-muted text-muted-foreground"
               : "bg-primary text-primary-foreground hover:scale-[1.02]"
           }`}
         >
-          <Plus className="size-4" /> {soldOut ? (lang === "ar" ? "نفذ" : "Sold out") : t("addToCart")}
+          <Plus className="size-4" />{" "}
+          {soldOut
+            ? lang === "ar"
+              ? "نفذ"
+              : "Sold out"
+            : full
+              ? lang === "ar"
+                ? "الحد الأقصى"
+                : "Max reached"
+              : t("addToCart")}
         </button>
         <button
           onClick={() => toggleWish(product.id)}

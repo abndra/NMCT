@@ -29,7 +29,7 @@ function ProductPage() {
   const { visible, loading } = useProducts();
   const { t, lang, dir } = useI18n();
   const { fmt } = useCurrency();
-  const { add, wishlist, toggleWish } = useCart();
+  const { add, wishlist, toggleWish, qtyOf } = useCart();
   const { requireAuth } = useAuth();
   const [active, setActive] = useState(0);
   const [size, setSize] = useState<string | undefined>(undefined);
@@ -39,6 +39,7 @@ function ProductPage() {
   const left = product ? availableStock(product) : 0;
   const soldOut = product ? isOutOfStock(product) : false;
   const low = product ? isLowStock(product) : false;
+  const inCart = product ? qtyOf(product.id) : 0;
 
   useEffect(() => {
     setActive(0);
@@ -201,10 +202,10 @@ function ProductPage() {
                   : "Out of stock"
                 : low
                   ? lang === "ar"
-                    ? `سارع! آخر ${left} قطع`
+                    ? `سارع! متبقي ${left} فقط`
                     : `Hurry, only ${left} left`
                   : lang === "ar"
-                    ? `متوفر · ${left} قطعة`
+                    ? `متبقي ${left} قطعة`
                     : `In stock · ${left} units`}
               {product.digital && (
                 <span className="opacity-80">
@@ -218,7 +219,10 @@ function ProductPage() {
                 <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="-"><Minus className="size-4" /></button>
                 <span className="w-6 text-center font-tech">{qty}</span>
                 <button
-                  onClick={() => setQty((q) => Math.min(Math.max(1, left), q + 1))}
+                  disabled={qty >= Math.max(1, left - inCart)}
+                  onClick={() =>
+                    setQty((q) => Math.min(Math.max(1, left - inCart), q + 1))
+                  }
                   aria-label="+"
                 >
                   <Plus className="size-4" />
@@ -236,12 +240,19 @@ function ProductPage() {
             </div>
 
             <button
-              disabled={soldOut}
+              disabled={soldOut || left - inCart <= 0}
               onClick={() => {
                 if (soldOut) return;
                 requireAuth(() => {
-                  add(product, { qty: Math.min(qty, left), ...(size ? { size } : {}) });
-                  toast.success(t("added"));
+                  const ok = add(product, {
+                    qty: Math.min(qty, Math.max(0, left - inCart)),
+                    ...(size ? { size } : {}),
+                  });
+                  if (ok) toast.success(t("added"));
+                  else
+                    toast.error(
+                      lang === "ar" ? `الحد الأقصى المتوفر ${left}` : `Only ${left} available`,
+                    );
                 });
               }}
               className={`inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl font-display text-lg transition-transform ${

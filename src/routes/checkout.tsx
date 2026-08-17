@@ -46,6 +46,7 @@ import {
   formatOrderNo,
   readPaymentMethods,
   type PaymentMethod,
+  checkCartStock,
 } from "@/lib/db";
 
 import { DIAL_CODES } from "@/lib/country-codes";
@@ -220,6 +221,18 @@ function CheckoutPage() {
 
     setBusy(true);
     try {
+      // never let an order exceed the real inventory
+      const short = await checkCartStock(lines.map((l) => ({ id: l.id, name: l.name, qty: l.qty })));
+      if (short.length) {
+        const first = short[0]!;
+        toast.error(
+          lang === "ar"
+            ? `الكمية المتوفرة من "${first.name}" هي ${first.available} فقط`
+            : `Only ${first.available} left of "${first.name}"`,
+        );
+        setBusy(false);
+        return;
+      }
       const payload = {
         customerName: name,
         senderName: name,

@@ -1073,7 +1073,6 @@ export async function deleteStockUnit(productId: string, unitId: string) {
 export async function syncProductStock(productId: string) {
   const units = await getUnits(productId);
   const total = Object.keys(units).length;
-  if (!total) return;
   await update(ref(getDb(), "products/" + productId), {
     stock: availableUnits({ units }).length,
     unitCount: total,
@@ -1104,6 +1103,31 @@ export function isLowStock(
 ) {
   const left = availableStock(p);
   return left > 0 && left <= Math.max(1, Number(p.lowStockAt) || 5);
+}
+
+/** Live available stock for a product, straight from the database. */
+export async function fetchAvailableStock(productId: string): Promise<number> {
+  const snap = await get(ref(getDb(), "products/" + productId));
+  if (!snap.exists()) return 0;
+  return availableStock(snap.val() as Product);
+}
+
+/** Validates cart lines against the live stock. Returns the lines that exceed it. */
+export async function checkCartStock(
+  lines: { id: string; name: string; qty: number }[],
+): Promise<{ id: string; name: string; available: number; qty: number }[]> {
+  const byId = new Map<string, { name: string; qty: number }>();
+  for (const l of lines) {
+    const cur = byId.get(l.id);
+    if (cur) cur.qty += l.qty;
+    else byId.set(l.id, { name: l.name, qty: l.qty });
+  }
+  const bad: { id: string; name: string; available: number; qty: number }[] = [];
+  for (const [id, v] of byId) {
+    const available = await fetchAvailableStock(id);
+    if (v.qty > available) bad.push({ id, name: v.name, available, qty: v.qty });
+  }
+  return bad;
 }
 
 export type StockState = "out" | "low" | "ok";
