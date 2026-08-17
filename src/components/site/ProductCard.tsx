@@ -4,6 +4,7 @@ import { availableStock, isLowStock, isOutOfStock, type Product } from "@/lib/db
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { useCurrency } from "@/lib/currency";
 import { toast } from "sonner";
 
 export function priceText(v: number, lang: "ar" | "en") {
@@ -15,6 +16,7 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
   const { add, wishlist, toggleWish } = useCart();
   const { requireAuth } = useAuth();
   const { t, lang } = useI18n();
+  const { fmt } = useCurrency();
   const img = product.image || product.images?.[0];
   const name = lang === "en" && product.nameEn ? product.nameEn : product.name;
   const off =
@@ -75,10 +77,10 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
             </p>
           )}
           <div className="flex items-center gap-2 pt-1">
-            <span className="font-display text-lg text-primary">{priceText(product.price, lang)}</span>
+            <span className="font-display text-lg text-primary">{fmt(product.price)}</span>
             {off > 0 && (
               <span className="text-sm text-muted-foreground line-through">
-                {priceText(product.oldPrice as number, lang)}
+                {fmt(product.oldPrice as number)}
               </span>
             )}
           </div>

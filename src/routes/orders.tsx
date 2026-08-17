@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { Layout } from "@/components/site/Layout";
 import { useAuth, GoogleMark } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { useCurrency } from "@/lib/currency";
 import { onMyOrdersChange, formatOrderNo, statusLabel, ORDER_STATUSES, type Order } from "@/lib/db";
 import { getDeviceId, getMyOrderIds, getMyPhones, rememberPhone, phoneKey } from "@/lib/device";
 import { priceText } from "@/components/site/ProductCard";
@@ -55,6 +56,7 @@ function StatusIcon({ status }: { status: string | undefined }) {
 
 function OrdersPage() {
   const { t, lang } = useI18n();
+  const { fmt } = useCurrency();
   const { user, promptLogin } = useAuth();
   const [phone, setPhone] = useState("");
   const [phones, setPhones] = useState<string[]>([]);
@@ -252,14 +254,14 @@ function OrdersPage() {
                           {it.name} × {it.qty}
                           {it.size ? ` · ${it.size}` : ""}
                         </span>
-                        <span className="font-tech">{priceText(it.price * it.qty, lang)}</span>
+                        <span className="font-tech">{fmt(it.price * it.qty)}</span>
                       </div>
                     ))}
                   </div>
 
                   <div className="mt-3 flex justify-between border-t border-border pt-3 font-display">
                     <span>{t("total")}</span>
-                    <span className="text-primary">{priceText(o.total, lang)}</span>
+                    <span className="text-primary">{fmt(o.total)}</span>
                   </div>
 
                   {Array.isArray(o.deliveredCodes) && o.deliveredCodes.length > 0 && (
@@ -390,27 +392,31 @@ function OrdersPage() {
                       </span>
                       <span className="flex items-center gap-1.5">
                         <CreditCard className="size-3.5" />
-                        {o.paymentMethod === "cod"
-                          ? lang === "ar"
-                            ? "الدفع عند الاستلام"
-                            : "Cash on delivery"
-                          : lang === "ar"
-                            ? "تحويل بنكي"
-                            : "Bank transfer"}
+                        {(o as { paymentMethodName?: string }).paymentMethodName ||
+                          (o.paymentMethod === "cod"
+                            ? lang === "ar"
+                              ? "الدفع عند الاستلام"
+                              : "Cash on delivery"
+                            : o.paymentMethod === "binance"
+                              ? "Binance — USDT"
+                              : lang === "ar"
+                                ? "تحويل بنكي"
+                                : "Bank transfer")}
                       </span>
+
                       <span className="flex items-center gap-1.5 sm:col-span-2">
                         <MapPin className="size-3.5" />
                         {lang === "ar" ? "تسليم داخل الموقع" : "In-site delivery"}
                       </span>
                       {!!o.deliveryFee && (
                         <span>
-                          {lang === "ar" ? "التوصيل" : "Delivery"}: {priceText(o.deliveryFee, lang)}
+                          {lang === "ar" ? "التوصيل" : "Delivery"}: {fmt(o.deliveryFee)}
                         </span>
                       )}
                       {!!o.discountAmount && (
                         <span>
                           {lang === "ar" ? "الخصم" : "Discount"}: −
-                          {priceText(o.discountAmount, lang)}
+                          {fmt(o.discountAmount)}
                         </span>
                       )}
                       {o.note && (

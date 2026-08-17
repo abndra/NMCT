@@ -3,11 +3,13 @@ import { useNavigate } from "@tanstack/react-router";
 import { useCart, lineKey } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { useCurrency } from "@/lib/currency";
 import { priceText } from "./ProductCard";
 
 export function CartDrawer() {
   const { open, setOpen, lines, subtotal, setQty, removeLine } = useCart();
   const { t, lang } = useI18n();
+  const { fmt } = useCurrency();
   const { requireAuth } = useAuth();
   const navigate = useNavigate();
 
@@ -45,7 +47,7 @@ export function CartDrawer() {
                 <div className="flex-1">
                   <p className="line-clamp-2 font-display text-sm">{l.name}</p>
                   {l.size && <p className="text-xs text-muted-foreground">{l.size}</p>}
-                  <p className="mt-1 font-display text-primary">{priceText(l.price, lang)}</p>
+                  <p className="mt-1 font-display text-primary">{fmt(l.price)}</p>
                   <div className="mt-2 flex items-center gap-2">
                     <button
                       className="grid size-7 place-items-center rounded-lg border border-border"
@@ -78,7 +80,7 @@ export function CartDrawer() {
           <div className="space-y-3 border-t border-border p-4">
             <div className="flex items-center justify-between font-display text-lg">
               <span>{t("subtotal")}</span>
-              <span className="text-primary">{priceText(subtotal, lang)}</span>
+              <span className="text-primary">{fmt(subtotal)}</span>
             </div>
             <button
               onClick={() =>

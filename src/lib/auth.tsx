@@ -41,9 +41,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async () => {
     setBusy(true);
     try {
-      await signInWithGoogle();
+      const res = await signInWithGoogle();
+      if (!res) {
+        // Mobile: the browser is being redirected to Google, nothing to confirm yet.
+        toast.info(lang === "ar" ? "جارٍ فتح تسجيل الدخول..." : "Opening sign-in...");
+        return;
+      }
       toast.success(lang === "ar" ? "تم تسجيل الدخول" : "Signed in");
       setDialog(false);
+
     } catch (err) {
       const msg = (err as Error)?.message;
       const code = (err as { code?: string })?.code;

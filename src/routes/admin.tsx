@@ -56,6 +56,11 @@ import {
   deleteDiscountCode,
   onDiscountCodesChange,
   updateSettings,
+  readPaymentMethods,
+  savePaymentMethods,
+  ensurePaymentMethods,
+  type PaymentMethod,
+
   waServerStatus,
   waServerControl,
   sendWhatsAppTest,
@@ -1594,6 +1599,8 @@ function SettingsTab() {
         </button>
       </div>
 
+      <PaymentMethodsCard />
+
       <div className={cardCls}>
         <div className="flex items-center gap-2">
           <span className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
@@ -1824,6 +1831,170 @@ function CloudsTab() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/* ---------------- settings: payment methods ---------------- */
+function PaymentMethodsCard() {
+  const { lang } = useI18n();
+  const settings = useSettings();
+  const [items, setItems] = useState<PaymentMethod[]>([]);
+  const saved = settings["paymentMethods"];
+
+  useEffect(() => {
+    void ensurePaymentMethods();
+  }, []);
+
+  useEffect(() => {
+    setItems(readPaymentMethods(settings));
+  }, [JSON.stringify(saved ?? null)]);
+
+  function patch(i: number, next: Partial<PaymentMethod>) {
+    setItems((list) => list.map((m, idx) => (idx === i ? { ...m, ...next } : m)));
+  }
+  function patchField(i: number, fi: number, next: Partial<{ label: string; value: string }>) {
+    setItems((list) =>
+      list.map((m, idx) =>
+        idx === i ? { ...m, fields: m.fields.map((f, j) => (j === fi ? { ...f, ...next } : f)) } : m,
+      ),
+    );
+  }
+
+  return (
+    <div className={cardCls}>
+      <div className="flex items-center gap-2">
+        <span className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
+          <Wallet className="size-4" />
+        </span>
+        <h2 className="font-display text-lg">
+          {lang === "ar" ? "طرق الدفع" : "Payment methods"}
+        </h2>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {lang === "ar"
+          ? "الطرق المفعّلة تظهر للزبون في صفحة الدفع مع إمكانية نسخ كل سطر."
+          : "Active methods appear at checkout with copyable lines."}
+      </p>
+
+      {items.map((m, i) => (
+        <div key={m.id} className="space-y-2 rounded-2xl border border-border p-3">
+          <div className="flex items-center gap-2">
+            <input
+              className={inputCls}
+              value={m.name}
+              onChange={(e) => patch(i, { name: e.target.value })}
+            />
+            <button
+              onClick={() => patch(i, { active: m.active === false })}
+              className={`h-11 shrink-0 rounded-xl border px-3 text-xs ${
+                m.active === false ? "border-border text-muted-foreground" : "border-primary text-primary"
+              }`}
+            >
+              {m.active === false
+                ? lang === "ar"
+                  ? "موقوفة"
+                  : "Off"
+                : lang === "ar"
+                  ? "مفعّلة"
+                  : "On"}
+            </button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              className={inputCls}
+              dir="ltr"
+              placeholder="English name"
+              value={m.nameEn || ""}
+              onChange={(e) => patch(i, { nameEn: e.target.value })}
+            />
+            <select
+              className={inputCls}
+              value={m.currency || "OMR"}
+              onChange={(e) => patch(i, { currency: e.target.value as "OMR" | "USDT" })}
+            >
+              <option value="OMR">OMR — ر.ع</option>
+              <option value="USDT">USDT</option>
+            </select>
+          </div>
+          {m.fields.map((f, fi) => (
+            <div key={fi} className="grid gap-2 sm:grid-cols-2">
+              <input
+                className={inputCls}
+                value={f.label}
+                onChange={(e) => patchField(i, fi, { label: e.target.value })}
+              />
+              <div className="flex gap-2">
+                <input
+                  className={inputCls}
+                  dir="ltr"
+                  value={f.value}
+                  onChange={(e) => patchField(i, fi, { value: e.target.value })}
+                />
+                <button
+                  onClick={() =>
+                    patch(i, { fields: m.fields.filter((_, j) => j !== fi) })
+                  }
+                  className="h-11 shrink-0 rounded-xl border border-border px-3 text-xs text-muted-foreground"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => patch(i, { fields: [...m.fields, { label: "", value: "" }] })}
+              className="h-10 rounded-xl border border-border px-3 text-xs"
+            >
+              {lang === "ar" ? "إضافة سطر" : "Add line"}
+            </button>
+            <button
+              onClick={() => setItems((list) => list.filter((_, j) => j !== i))}
+              className="h-10 rounded-xl border border-destructive/50 px-3 text-xs text-destructive"
+            >
+              {lang === "ar" ? "حذف الطريقة" : "Delete method"}
+            </button>
+          </div>
+          <Labeled label={lang === "ar" ? "شعار مخصص (اختياري)" : "Custom logo (optional)"}>
+            <ImageUploader
+              images={m.logo ? [m.logo] : []}
+              onChange={(next) => patch(i, { logo: next[0] || "" })}
+              folder="nmct_payments"
+              multiple={false}
+            />
+          </Labeled>
+        </div>
+      ))}
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() =>
+            setItems((list) => [
+              ...list,
+              {
+                id: "pm_" + Date.now(),
+                name: lang === "ar" ? "طريقة دفع جديدة" : "New method",
+                currency: "OMR",
+                active: true,
+                fields: [{ label: "", value: "" }],
+              },
+            ])
+          }
+          className="h-11 rounded-xl border border-border px-4 text-sm"
+        >
+          {lang === "ar" ? "إضافة طريقة دفع" : "Add payment method"}
+        </button>
+        <button
+          onClick={async () => {
+            await savePaymentMethods(items);
+            toast.success(lang === "ar" ? "تم الحفظ" : "Saved");
+          }}
+          className="h-11 flex-1 rounded-xl bg-primary font-display text-primary-foreground"
+        >
+          {lang === "ar" ? "حفظ طرق الدفع" : "Save payment methods"}
+        </button>
+      </div>
     </div>
   );
 }

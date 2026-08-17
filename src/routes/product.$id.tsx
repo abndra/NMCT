@@ -6,6 +6,7 @@ import { Layout } from "@/components/site/Layout";
 import { ProductCard, priceText } from "@/components/site/ProductCard";
 import { useProducts } from "@/hooks/use-store-data";
 import { useI18n } from "@/lib/i18n";
+import { useCurrency } from "@/lib/currency";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 import { availableStock, isLowStock, isOutOfStock } from "@/lib/db";
@@ -27,6 +28,7 @@ function ProductPage() {
   const router = useRouter();
   const { visible, loading } = useProducts();
   const { t, lang, dir } = useI18n();
+  const { fmt } = useCurrency();
   const { add, wishlist, toggleWish } = useCart();
   const { requireAuth } = useAuth();
   const [active, setActive] = useState(0);
@@ -143,10 +145,10 @@ function ProductPage() {
             <h1 className="font-display text-3xl leading-tight sm:text-4xl">{name}</h1>
 
             <div className="flex flex-wrap items-center gap-3">
-              <span className="font-display text-4xl text-primary">{priceText(unit, lang)}</span>
+              <span className="font-display text-4xl text-primary">{fmt(unit)}</span>
               {product.oldPrice && product.oldPrice > product.price && (
                 <span className="text-lg text-muted-foreground line-through">
-                  {priceText(product.oldPrice, lang)}
+                  {fmt(product.oldPrice)}
                 </span>
               )}
               {!!product.soldCount && (
@@ -171,7 +173,7 @@ function ProductPage() {
                       }`}
                     >
                       {s.name}
-                      {s.price ? ` · ${priceText(s.price, lang)}` : ""}
+                      {s.price ? ` · ${fmt(s.price)}` : ""}
                     </button>
                   ))}
                 </div>
@@ -248,7 +250,7 @@ function ProductPage() {
                 ? lang === "ar"
                   ? "نفذت الكمية"
                   : "Out of stock"
-                : `${t("addToCart")} · ${priceText(unit * qty, lang)}`}
+                : `${t("addToCart")} · ${fmt(unit * qty)}`}
             </button>
 
             <div className="grid grid-cols-3 gap-2 pt-2">

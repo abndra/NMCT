@@ -201,6 +201,16 @@ export type Unsub = () => void;
 /* ============================ AUTH ============================ */
 const DEFAULT_AVATAR = "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=nmct";
 
+/** True on phones/tablets and inside webviews where popups don't work. */
+function isMobileBrowser() {
+  if (typeof navigator === "undefined" || typeof window === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const mobileUa = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|Mobile|Silk|FBAN|FBAV|Instagram|Line|Snapchat|TikTok/i.test(ua);
+  const iPadOS = /Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1;
+  const narrow = window.innerWidth < 820;
+  return mobileUa || iPadOS || narrow;
+}
+
 export async function signInWithGoogle() {
   const auth = getFbAuth();
   try {
@@ -210,6 +220,14 @@ export async function signInWithGoogle() {
   }
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
+
+  // Phones (and in-app browsers such as Instagram / Facebook / TikTok) block
+  // or silently kill the Google popup, so they always use the redirect flow.
+  if (isMobileBrowser()) {
+    await signInWithRedirect(auth, provider);
+    return null;
+  }
+
   try {
     const res = await signInWithPopup(auth, provider);
     await saveUser(res.user);
@@ -623,6 +641,21 @@ export async function fulfillOrderWithReport(id: string): Promise<FulfillReport>
     }
     await update(pRef, updates);
   }
+  // Every item must leave a trace on the customer's "My orders" page, even when
+  // it is a normal (non-digital) product handed over on WhatsApp.
+  for (const item of order.items || []) {
+    if (delivered.some((d) => d.productId === item.id)) continue;
+    const pSnap = await get(ref(db, "products/" + item.id));
+    const product = (pSnap.exists() ? pSnap.val() : {}) as Product;
+    delivered.push({
+      productId: item.id,
+      productName: item.name,
+      code:
+        product.deliveryText ||
+        "تم تسليم هذا المنتج ✅ — أُرسلت التفاصيل أيضاً على الواتساب. لأي استفسار راسلنا.",
+      kind: "text",
+    });
+  }
   if (delivered.length) {
     await update(ref(db, "orders/" + id), { deliveredCodes: delivered, deliveredAt: Date.now() });
   }
@@ -772,6 +805,80 @@ export function onSettingsChange(cb: (s: Record<string, unknown>) => void): Unsu
 export async function updateSettings(key: string, value: unknown) {
   await set(ref(getDb(), "settings/" + key), value);
 }
+
+/* ============================ PAYMENT METHODS ============================ */
+export type PaymentField = { label: string; value: string };
+export type PaymentMethod = {
+  id: string;
+  name: string;
+  nameEn?: string;
+  /** Bundled logo key: bank | binance | usdt */
+  icon?: string;
+  /** Custom uploaded logo (wins over `icon`). */
+  logo?: string;
+  /** Currency the customer transfers in. */
+  currency?: "OMR" | "USDT";
+  note?: string;
+  noteEn?: string;
+  fields: PaymentField[];
+  active?: boolean;
+};
+
+export const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
+  {
+    id: "bank",
+    name: "تحويل بنكي — بنك مسقط",
+    nameEn: "Bank transfer — Bank Muscat",
+    icon: "bank",
+    currency: "OMR",
+    active: true,
+    fields: [
+      { label: "اسم البنك", value: "بنك مسقط" },
+      { label: "رقم الحساب", value: "97825550" },
+      { label: "اسم صاحب الحساب", value: "NMCT" },
+    ],
+  },
+  {
+    id: "binance",
+    name: "Binance — USDT",
+    nameEn: "Binance — USDT",
+    icon: "binance",
+    currency: "USDT",
+    active: true,
+    note: "حوّل المبلغ بعملة USDT عبر شبكة BEP20 أو مباشرة على Binance ID.",
+    noteEn: "Send USDT over the BEP20 network or directly to the Binance ID.",
+    fields: [
+      { label: "Binance ID", value: "781255983" },
+      { label: "BEP20 Address", value: "0x1f6faf573c33de490f89068b4557714b977613b5" },
+      { label: "العملة / Currency", value: "USDT" },
+    ],
+  },
+];
+
+export function readPaymentMethods(settings: Record<string, unknown>): PaymentMethod[] {
+  const raw = settings["paymentMethods"];
+  const list = Array.isArray(raw)
+    ? (raw as PaymentMethod[])
+    : raw && typeof raw === "object"
+      ? (Object.values(raw as Record<string, PaymentMethod>) as PaymentMethod[])
+      : [];
+  const clean = list
+    .filter((m) => m && m.id && m.name)
+    .map((m) => ({ ...m, fields: Array.isArray(m.fields) ? m.fields : [] }));
+  return (clean.length ? clean : DEFAULT_PAYMENT_METHODS).filter((m) => m.active !== false);
+}
+
+export async function savePaymentMethods(methods: PaymentMethod[]) {
+  await set(ref(getDb(), "settings/paymentMethods"), methods);
+}
+
+/** Writes the built-in methods (bank + Binance) once, if none were saved yet. */
+export async function ensurePaymentMethods() {
+  const snap = await get(ref(getDb(), "settings/paymentMethods"));
+  if (snap.exists()) return;
+  await savePaymentMethods(DEFAULT_PAYMENT_METHODS);
+}
+
 
 /* ============================ USERS / VISITS ============================ */
 export function onUsersChange(cb: (items: { id: string }[]) => void): Unsub {

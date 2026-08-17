@@ -18,6 +18,10 @@ import { Layout } from "@/components/site/Layout";
 import { useCart } from "@/lib/cart";
 import { useAuth, GoogleMark } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { useCurrency, toUsdt, OMR_TO_USDT } from "@/lib/currency";
+import bankIcon from "@/assets/flag-oman.png";
+import binanceIcon from "@/assets/binance.png";
+import usdtIcon from "@/assets/usdt.png";
 import { priceText } from "@/components/site/ProductCard";
 import {
   createOrder,
@@ -27,6 +31,8 @@ import {
   DEFAULT_COUNTRY_CODE,
   waNumber,
   formatOrderNo,
+  readPaymentMethods,
+  type PaymentMethod,
 } from "@/lib/db";
 
 import { DIAL_CODES } from "@/lib/country-codes";
@@ -53,8 +59,16 @@ export const Route = createFileRoute("/checkout")({
 const inputCls =
   "h-12 w-full rounded-xl border border-border bg-background/60 px-3 text-sm outline-none transition-colors focus:border-primary";
 
+function methodLogo(m: PaymentMethod) {
+  if (m.logo) return m.logo;
+  if (m.icon === "binance") return binanceIcon;
+  if (m.icon === "usdt" || m.currency === "USDT") return usdtIcon;
+  return bankIcon;
+}
+
 function CheckoutPage() {
   const { t, lang, dir } = useI18n();
+  const { fmt, omr, usdt } = useCurrency();
   const { lines, subtotal, clear } = useCart();
   const { user, promptLogin } = useAuth();
   const navigate = useNavigate();
@@ -82,7 +96,21 @@ function CheckoutPage() {
   const [discount, setDiscount] = useState(0);
   const [codeId, setCodeId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedKey, setCopiedKey] = useState("");
+  const [methodId, setMethodId] = useState("");
+
+  const methods = readPaymentMethods(settings);
+  const method = methods.find((m) => m.id === methodId) || methods[0];
+
+  useEffect(() => {
+    if (!methodId && methods.length) setMethodId(methods[0]!.id);
+  }, [methods.length]);
+
+  function copyLine(key: string, value: string) {
+    navigator.clipboard?.writeText(value);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(""), 1500);
+  }
 
   useEffect(() => {
     if (user?.displayName && !name) setName(user.displayName);
@@ -159,7 +187,10 @@ function CheckoutPage() {
         currency: "OMR",
         deliveryMethod: "digital",
         deliveryFee: 0,
-        paymentMethod: "bank",
+        paymentMethod: method?.id || "bank",
+        paymentMethodName: method ? method.name : "",
+        paymentCurrency: method?.currency || "OMR",
+        totalUsdt: Number(toUsdt(total).toFixed(2)),
         receiptImage: receipt,
         discountCode: codeId ? code : "",
         discountAmount: discount,
@@ -249,7 +280,7 @@ function CheckoutPage() {
                       <p className="font-tech text-xs text-muted-foreground">× {l.qty}</p>
                     </div>
                     <span className="font-tech text-sm text-primary">
-                      {priceText(l.price * l.qty, lang)}
+                      {fmt(l.price * l.qty)}
                     </span>
                   </div>
                 ))}
@@ -277,7 +308,7 @@ function CheckoutPage() {
               </div>
               {discount > 0 && (
                 <p className="mt-2 text-sm text-accent">
-                  {t("discount")}: -{priceText(discount, lang)}
+                  {t("discount")}: -{fmt(discount)}
                 </p>
               )}
             </Section>
@@ -347,38 +378,115 @@ function CheckoutPage() {
             {/* PAYMENT */}
             <Section
               icon={<Banknote className="size-4" />}
-              title={lang === "ar" ? "الدفع (تحويل بنكي)" : "Payment (bank transfer)"}
+              title={lang === "ar" ? "طريقة الدفع" : "Payment method"}
             >
               <div className="space-y-4 rounded-2xl border border-border bg-background/40 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      {lang === "ar" ? "رقم الحساب" : "Account number"}
-                    </p>
-                    <p className="font-tech text-xl text-primary">{bankAccount}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {bankName} · {bankHolder}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard?.writeText(bankAccount);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1500);
-                    }}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-accent px-4 text-sm text-accent"
-                  >
-                    {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-                    {lang === "ar" ? "نسخ" : "Copy"}
-                  </button>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {methods.map((m) => {
+                    const active = m.id === methodId;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setMethodId(m.id)}
+                        className={`flex items-center gap-3 rounded-2xl border p-3 text-start transition-colors ${
+                          active
+                            ? "border-primary bg-primary/10"
+                            : "border-border bg-background/60 hover:border-primary/50"
+                        }`}
+                      >
+                        <img
+                          src={methodLogo(m)}
+                          alt={m.name}
+                          loading="lazy"
+                          className="size-9 shrink-0 rounded-xl object-contain"
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold">
+                            {lang === "ar" ? m.name : m.nameEn || m.name}
+                          </span>
+                          <span className="block text-[11px] text-muted-foreground">
+                            {m.currency === "USDT"
+                              ? usdt(total)
+                              : omr(total)}
+                          </span>
+                        </span>
+                        {active && <Check className="ms-auto size-4 shrink-0 text-primary" />}
+                      </button>
+                    );
+                  })}
                 </div>
+
+                {method && (
+                  <div className="space-y-2">
+                    {method.fields.map((f, i) => (
+                      <div
+                        key={`${f.label}-${i}`}
+                        className="flex items-center gap-3 rounded-xl border border-border bg-background/60 p-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] text-muted-foreground">{f.label}</p>
+                          <p className="break-all font-tech text-sm text-primary">{f.value}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => copyLine(`${method.id}-${i}`, f.value)}
+                          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-accent px-3 text-xs text-accent"
+                        >
+                          {copiedKey === `${method.id}-${i}` ? (
+                            <Check className="size-3.5" />
+                          ) : (
+                            <Copy className="size-3.5" />
+                          )}
+                          {lang === "ar" ? "نسخ" : "Copy"}
+                        </button>
+                      </div>
+                    ))}
+
+                    <div className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-muted-foreground">
+                          {lang === "ar" ? "المبلغ المطلوب تحويله" : "Amount to transfer"}
+                        </p>
+                        <p className="font-tech text-sm text-primary">
+                          {method.currency === "USDT" ? usdt(total) : omr(total)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyLine(
+                            "amount",
+                            method.currency === "USDT"
+                              ? toUsdt(total).toFixed(2)
+                              : total.toFixed(2),
+                          )
+                        }
+                        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-accent px-3 text-xs text-accent"
+                      >
+                        {copiedKey === "amount" ? (
+                          <Check className="size-3.5" />
+                        ) : (
+                          <Copy className="size-3.5" />
+                        )}
+                        {lang === "ar" ? "نسخ" : "Copy"}
+                      </button>
+                    </div>
+
+                    {(lang === "ar" ? method.note : method.noteEn || method.note) && (
+                      <p className="text-xs text-muted-foreground">
+                        {lang === "ar" ? method.note : method.noteEn || method.note}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <ol className="space-y-1 text-xs text-muted-foreground">
                   <li>
                     1.{" "}
                     {lang === "ar"
-                      ? "انسخ رقم الحساب وحوّل المبلغ الإجمالي."
-                      : "Copy the account number and transfer the total."}
+                      ? "انسخ بيانات الدفع وحوّل المبلغ الإجمالي."
+                      : "Copy the payment details and transfer the total."}
                   </li>
                   <li>
                     2.{" "}
@@ -394,7 +502,7 @@ function CheckoutPage() {
                   </li>
                 </ol>
 
-                {bankImage && (
+                {method?.id === "bank" && bankImage && (
                   <img
                     src={bankImage}
                     alt={lang === "ar" ? "بيانات الحساب البنكي" : "Bank account details"}
@@ -428,24 +536,35 @@ function CheckoutPage() {
 
             {/* TOTALS */}
             <div className="rounded-3xl glass-panel p-5 sm:p-6">
-              <Row label={t("subtotal")} value={priceText(subtotal, lang)} />
+              <Row label={t("subtotal")} value={fmt(subtotal)} />
               {discount > 0 && (
-                <Row label={t("discount")} value={`-${priceText(discount, lang)}`} accent />
+                <Row label={t("discount")} value={`-${fmt(discount)}`} accent />
               )}
               <Row
                 label={lang === "ar" ? "التسليم" : "Delivery"}
                 value={lang === "ar" ? "رقمي داخل الموقع" : "Digital, in-site"}
               />
-              <div className="mt-3 flex justify-between border-t border-border pt-3 font-display text-xl">
+              <div className="mt-3 flex items-start justify-between gap-3 border-t border-border pt-3 font-display text-xl">
                 <span>{t("total")}</span>
-                <span className="text-primary">{priceText(total, lang)}</span>
+                <span className="text-end">
+                  <span className="block text-primary">{omr(total)}</span>
+                  <span className="block font-tech text-sm text-muted-foreground">
+                    ≈ {usdt(total)}
+                  </span>
+                </span>
               </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {lang === "ar"
+                  ? `سعر التحويل الثابت: 1 ر.ع = ${OMR_TO_USDT} USDT`
+                  : `Fixed rate: 1 OMR = ${OMR_TO_USDT} USDT`}
+              </p>
               <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                 <Zap className="size-3.5 text-accent" />
                 {lang === "ar"
                   ? "بعد قبول الطلب تظهر أكواد منتجاتك مباشرة في صفحة طلباتي."
                   : "Once accepted, your codes appear on the Orders page."}
               </p>
+
               <button
                 disabled={busy}
                 onClick={submit}
@@ -465,7 +584,7 @@ function CheckoutPage() {
             onClick={submit}
             className="h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground disabled:opacity-60"
           >
-            {busy ? "..." : `${t("placeOrder")} · ${priceText(total, lang)}`}
+            {busy ? "..." : `${t("placeOrder")} · ${fmt(total)}`}
           </button>
         </div>
       )}
