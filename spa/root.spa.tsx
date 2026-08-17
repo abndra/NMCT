@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, Link, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
 import { I18nProvider } from "../src/lib/i18n";
+import { CurrencyProvider } from "../src/lib/currency";
 import { CartProvider } from "../src/lib/cart";
 import { AuthProvider } from "../src/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
@@ -56,12 +57,14 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
+        <CurrencyProvider>
         <AuthProvider>
           <CartProvider>
             <Outlet />
             <Toaster position="top-center" richColors />
           </CartProvider>
         </AuthProvider>
+        </CurrencyProvider>
       </I18nProvider>
     </QueryClientProvider>
   );
