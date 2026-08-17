@@ -129,6 +129,14 @@ export type Order = {
   paymentMethod?: "bank" | "cod" | string;
   senderName?: string;
   receiptImage?: string;
+  receiptImages?: string[];
+  paymentProof?: string;
+  paymentMethodName?: string;
+  paymentCurrency?: string;
+  amountToPay?: string;
+  cardNumber?: string;
+  cardNumbers?: string[];
+
   status?: string;
   statusText?: string;
   accepted?: boolean;

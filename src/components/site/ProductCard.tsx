@@ -36,14 +36,15 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
         className="block w-full text-start"
         aria-label={name}
       >
-        <div className="relative aspect-4/5 overflow-hidden bg-secondary/50 p-2 sm:p-3">
+        <div className="relative aspect-4/5 overflow-hidden bg-secondary/50">
           {img ? (
             <img
               src={img}
               alt={name}
               loading="lazy"
-              className="block size-full max-h-full max-w-full object-contain object-center"
+              className="block size-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
             />
+
           ) : (
             <div className="grid size-full place-items-center font-display text-3xl text-muted-foreground">
               GP

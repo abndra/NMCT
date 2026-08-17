@@ -448,18 +448,37 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
               <span>{priceText(o.total, lang)}</span>
             </div>
           </div>
-          {o.receiptImage && (
-            <a href={o.receiptImage} target="_blank" rel="noreferrer" className="block">
-              <p className="mb-1 text-xs text-muted-foreground">
-                {lang === "ar" ? "إيصال التحويل" : "Transfer receipt"}
+          {!!(o.cardNumbers?.length || o.cardNumber) && (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">
+                {lang === "ar" ? "أكواد بطاقات أوريدو" : "Ooredoo card codes"}
               </p>
-              <img
-                src={o.receiptImage}
-                alt="receipt"
-                className="max-h-56 rounded-xl border border-border object-contain"
-              />
-            </a>
+              {(o.cardNumbers?.length ? o.cardNumbers : [o.cardNumber || ""]).map((c, i) => (
+                <p key={i} className="break-all rounded-lg border border-border p-2 font-tech text-sm">
+                  {c}
+                </p>
+              ))}
+            </div>
           )}
+          {!!(o.receiptImages?.length || o.receiptImage) && (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">
+                {lang === "ar" ? "صور الإثبات" : "Proof images"}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {(o.receiptImages?.length ? o.receiptImages : [o.receiptImage || ""]).map((r, i) => (
+                  <a key={r + i} href={r} target="_blank" rel="noreferrer" className="block">
+                    <img
+                      src={r}
+                      alt="receipt"
+                      className="max-h-56 w-full rounded-xl border border-border object-contain"
+                    />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 

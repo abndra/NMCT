@@ -18,11 +18,23 @@ export function toOoredoo(omr: number) {
   return Number(omr || 0) * OMR_TO_OOREDOO;
 }
 
+/** Rounds up to the nearest 0.5 (9.33 -> 9.5, 9.61 -> 10). */
+export function roundToHalf(v: number) {
+  return Math.ceil((Number(v) || 0) * 2) / 2;
+}
+
+/** Ooredoo card amount: always a clean 0.5 / 1.0 step. */
+export function ooredooCardAmount(omr: number) {
+  return roundToHalf(toOoredoo(omr));
+}
+
 /** Formats an Ooredoo amount. */
-export function moneyOoredoo(omr: number, lang: "ar" | "en") {
-  const v = toOoredoo(omr).toFixed(2);
+export function moneyOoredoo(omr: number, lang: "ar" | "en", card = false) {
+  const raw = card ? ooredooCardAmount(omr) : toOoredoo(omr);
+  const v = raw.toFixed(2);
   return lang === "ar" ? `${v} ر.ع أوريدو` : `${v} OMR Ooredoo`;
 }
+
 
 
 /** Formats an OMR amount in the requested currency. */

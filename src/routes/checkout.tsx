@@ -9,16 +9,27 @@ import {
   Check,
   Copy,
   Loader2,
+  Plus,
   Upload,
   User,
   Wallet,
+  X,
   Zap,
 } from "lucide-react";
+
 import { Layout } from "@/components/site/Layout";
 import { useCart } from "@/lib/cart";
 import { useAuth, GoogleMark } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { useCurrency, toUsdt, toOoredoo, moneyOoredoo, OMR_TO_USDT } from "@/lib/currency";
+import {
+  useCurrency,
+  toUsdt,
+  toOoredoo,
+  moneyOoredoo,
+  ooredooCardAmount,
+  OMR_TO_USDT,
+} from "@/lib/currency";
+
 import bankIcon from "@/assets/flag-oman.png";
 import binanceIcon from "@/assets/binance.png";
 import usdtIcon from "@/assets/usdt.png";
@@ -94,8 +105,9 @@ function CheckoutPage() {
   const [phone, setPhone] = useState("");
   const [cc, setCc] = useState(DEFAULT_COUNTRY_CODE);
   const [note, setNote] = useState("");
-  const [receipt, setReceipt] = useState("");
+  const [receipts, setReceipts] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+
   const [code, setCode] = useState("");
   const [discount, setDiscount] = useState(0);
   const [codeId, setCodeId] = useState<string | null>(null);
@@ -103,7 +115,7 @@ function CheckoutPage() {
   const [copiedKey, setCopiedKey] = useState("");
   const [methodId, setMethodId] = useState("");
   const [payMode, setPayMode] = useState<"transfer" | "card">("transfer");
-  const [cardNumber, setCardNumber] = useState("");
+  const [cardNumbers, setCardNumbers] = useState<string[]>([""]);
 
   const methods = readPaymentMethods(settings);
   const method = methods.find((m) => m.id === methodId) || methods[0];
@@ -116,21 +128,23 @@ function CheckoutPage() {
 
   useEffect(() => {
     setPayMode("transfer");
-    setCardNumber("");
+    setCardNumbers([""]);
   }, [methodId]);
 
   /** Amount text in the currency of the selected method. */
-  function amountText(m?: PaymentMethod) {
+  function amountText(m?: PaymentMethod, card = cardMode) {
     if (!m) return omr(total);
     if (m.currency === "USDT") return usdt(total);
-    if (m.currency === "OOREDOO") return moneyOoredoo(total, lang);
+    if (m.currency === "OOREDOO") return moneyOoredoo(total, lang, card);
     return omr(total);
   }
-  function amountRaw(m?: PaymentMethod) {
+  function amountRaw(m?: PaymentMethod, card = cardMode) {
     if (m?.currency === "USDT") return toUsdt(total).toFixed(2);
-    if (m?.currency === "OOREDOO") return toOoredoo(total).toFixed(2);
+    if (m?.currency === "OOREDOO")
+      return (card ? ooredooCardAmount(total) : toOoredoo(total)).toFixed(2);
     return total.toFixed(2);
   }
+
 
 
   function copyLine(key: string, value: string) {
@@ -160,18 +174,21 @@ function CheckoutPage() {
     toast.success(t("couponApplied"));
   }
 
-  async function pickReceipt(file: File) {
+  async function pickReceipts(files: File[]) {
+    if (!files.length) return;
     setUploading(true);
     try {
-      const url = await uploadImage(file, "nmct_receipts");
-      setReceipt(url);
-      toast.success(lang === "ar" ? "تم رفع الإيصال" : "Receipt uploaded");
+      const urls: string[] = [];
+      for (const f of files.slice(0, 10)) urls.push(await uploadImage(f, "nmct_receipts"));
+      setReceipts((prev) => [...prev, ...urls].slice(0, 10));
+      toast.success(lang === "ar" ? "تم رفع الصور" : "Images uploaded");
     } catch {
-      toast.error(lang === "ar" ? "تعذر رفع الإيصال" : "Upload failed");
+      toast.error(lang === "ar" ? "تعذر رفع الصورة" : "Upload failed");
     } finally {
       setUploading(false);
     }
   }
+
 
   async function submit() {
     if (!user) {
@@ -186,16 +203,17 @@ function CheckoutPage() {
       toast.error(lang === "ar" ? "أدخل رقم هاتف صحيح" : "Enter a valid phone number");
       return;
     }
+    const codes = cardNumbers.map((c) => c.trim()).filter((c) => c.length >= 4);
     if (cardMode) {
-      if (!receipt && cardNumber.trim().length < 6) {
+      if (!receipts.length && !codes.length) {
         toast.error(
           lang === "ar"
-            ? "أدخل رقم بطاقة أوريدو أو ارفع صورة الرسالة"
-            : "Enter the Ooredoo card number or upload a photo of the message",
+            ? "أدخل رقم بطاقة أوريدو واحد على الأقل أو ارفع صورة الرسالة"
+            : "Enter at least one Ooredoo card number or upload a card photo",
         );
         return;
       }
-    } else if (!receipt) {
+    } else if (!receipts.length) {
       toast.error(lang === "ar" ? "ارفع صورة إيصال التحويل" : "Upload the transfer receipt");
       return;
     }
@@ -227,11 +245,14 @@ function CheckoutPage() {
         paymentMethodName: method ? method.name : "",
         paymentCurrency: method?.currency || "OMR",
         paymentProof: cardMode ? "card" : "receipt",
-        cardNumber: cardMode ? cardNumber.trim() : "",
+        cardNumber: cardMode ? codes.join(" | ") : "",
+        cardNumbers: cardMode ? codes : [],
         totalUsdt: Number(toUsdt(total).toFixed(2)),
         totalOoredoo: Number(toOoredoo(total).toFixed(2)),
         amountToPay: amountRaw(method),
-        receiptImage: receipt,
+        receiptImage: receipts[0] || "",
+        receiptImages: receipts,
+
 
         discountCode: codeId ? code : "",
         discountAmount: discount,
@@ -557,9 +578,10 @@ function CheckoutPage() {
                       <li>
                         2.{" "}
                         {lang === "ar"
-                          ? "اكتب رقم البطاقة هنا، أو صوّر رسالة البطاقة وارفعها."
-                          : "Type the card number here, or upload a photo of the card message."}
+                          ? "اكتب أكواد البطاقات هنا (حتى 10 أكواد)، أو ارفع صور رسائل البطاقات."
+                          : "Type the card codes here (up to 10), or upload the card message photos."}
                       </li>
+
                       <li>
                         3. {lang === "ar" ? "أكّد الطلب." : "Confirm the order."}
                       </li>
@@ -597,44 +619,107 @@ function CheckoutPage() {
                 )}
 
                 {cardMode && (
-                  <input
-                    className={inputCls}
-                    inputMode="numeric"
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    placeholder={
-                      lang === "ar" ? "رقم بطاقة أوريدو (اختياري مع الصورة)" : "Ooredoo card number"
-                    }
-                  />
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      {lang === "ar"
+                        ? "أكواد بطاقات أوريدو (يمكنك إضافة حتى 10 أكواد)"
+                        : "Ooredoo card codes (up to 10)"}
+                    </p>
+                    {cardNumbers.map((c, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input
+                          className={inputCls}
+                          inputMode="numeric"
+                          dir="ltr"
+                          value={c}
+                          onChange={(e) =>
+                            setCardNumbers((prev) =>
+                              prev.map((v, k) => (k === i ? e.target.value : v)),
+                            )
+                          }
+                          placeholder={
+                            lang === "ar" ? `الكود رقم ${i + 1}` : `Card code #${i + 1}`
+                          }
+                        />
+                        {cardNumbers.length > 1 && (
+                          <button
+                            type="button"
+                            aria-label="remove"
+                            onClick={() =>
+                              setCardNumbers((prev) => prev.filter((_, k) => k !== i))
+                            }
+                            className="grid size-11 shrink-0 place-items-center rounded-xl border border-border text-muted-foreground hover:border-destructive hover:text-destructive"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {cardNumbers.length < 10 && (
+                      <button
+                        type="button"
+                        onClick={() => setCardNumbers((prev) => [...prev, ""])}
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-accent px-3 text-xs text-accent"
+                      >
+                        <Plus className="size-3.5" />
+                        {lang === "ar" ? "إضافة كود آخر" : "Add another code"}
+                      </button>
+                    )}
+                  </div>
                 )}
 
-                <label className="flex h-28 cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border text-sm text-muted-foreground hover:border-primary hover:text-primary">
-                  {uploading ? (
-                    <Loader2 className="size-5 animate-spin" />
-                  ) : receipt ? (
-                    <img src={receipt} alt="receipt" className="h-24 rounded-xl object-contain" />
-                  ) : (
-                    <>
-                      <Upload className="size-5" />
-                      {cardMode
-                        ? lang === "ar"
-                          ? "ارفع صورة رسالة البطاقة (اختياري)"
-                          : "Upload the card message photo (optional)"
-                        : lang === "ar"
-                          ? "ارفع صورة الإيصال"
-                          : "Upload receipt"}
-                    </>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    hidden
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void pickReceipt(f);
-                    }}
-                  />
-                </label>
+                {receipts.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {receipts.map((r, i) => (
+                      <div key={r + i} className="relative">
+                        <img
+                          src={r}
+                          alt=""
+                          className="h-24 w-full rounded-xl border border-border object-cover"
+                        />
+                        <button
+                          type="button"
+                          aria-label="remove image"
+                          onClick={() => setReceipts((prev) => prev.filter((_, k) => k !== i))}
+                          className="absolute end-1 top-1 grid size-7 place-items-center rounded-lg bg-background/90 text-destructive"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {receipts.length < 10 && (
+                  <label className="flex h-28 cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border text-center text-sm text-muted-foreground hover:border-primary hover:text-primary">
+                    {uploading ? (
+                      <Loader2 className="size-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Upload className="size-5" />
+                        {cardMode
+                          ? lang === "ar"
+                            ? "ارفع صور رسائل البطاقات (يمكن أكثر من صورة)"
+                            : "Upload card message photos (multiple allowed)"
+                          : lang === "ar"
+                            ? "ارفع صورة الإيصال"
+                            : "Upload receipt"}
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      hidden
+                      onChange={(e) => {
+                        const fs = Array.from(e.target.files || []);
+                        e.target.value = "";
+                        if (fs.length) void pickReceipts(fs);
+                      }}
+                    />
+                  </label>
+                )}
+
 
               </div>
             </Section>
