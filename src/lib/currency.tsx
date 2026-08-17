@@ -4,11 +4,26 @@ import { useI18n } from "@/lib/i18n";
 /** Fixed conversion rate: 1 OMR = 2.5 USDT. */
 export const OMR_TO_USDT = 2.5;
 
+/** Ooredoo pricing: 750 baisa (bank) = 1 Ooredoo rial. */
+export const OMR_TO_OOREDOO = 1 / 0.75;
+
 export type Currency = "OMR" | "USDT";
 
 export function toUsdt(omr: number) {
   return Number(omr || 0) * OMR_TO_USDT;
 }
+
+/** Converts an OMR (bank) amount into the equivalent Ooredoo balance. */
+export function toOoredoo(omr: number) {
+  return Number(omr || 0) * OMR_TO_OOREDOO;
+}
+
+/** Formats an Ooredoo amount. */
+export function moneyOoredoo(omr: number, lang: "ar" | "en") {
+  const v = toOoredoo(omr).toFixed(2);
+  return lang === "ar" ? `${v} ر.ع أوريدو` : `${v} OMR Ooredoo`;
+}
+
 
 /** Formats an OMR amount in the requested currency. */
 export function money(omr: number, currency: Currency, lang: "ar" | "en") {

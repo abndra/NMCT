@@ -780,16 +780,18 @@ export type PaymentMethod = {
   id: string;
   name: string;
   nameEn?: string;
-  /** Bundled logo key: bank | binance | usdt */
+  /** Bundled logo key: bank | binance | usdt | ooredoo */
   icon?: string;
   /** Custom uploaded logo (wins over `icon`). */
   logo?: string;
   /** Currency the customer transfers in. */
-  currency?: "OMR" | "USDT";
+  currency?: "OMR" | "USDT" | "OOREDOO";
   note?: string;
   noteEn?: string;
   fields: PaymentField[];
   active?: boolean;
+  /** Customer may send an Ooredoo card instead of a transfer receipt. */
+  allowCard?: boolean;
 };
 
 export const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
@@ -821,7 +823,24 @@ export const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
       { label: "العملة / Currency", value: "USDT" },
     ],
   },
+  {
+    id: "ooredoo",
+    name: "أوريدو — تحويل رصيد",
+    nameEn: "Ooredoo — balance transfer",
+    icon: "ooredoo",
+    currency: "OOREDOO",
+    active: true,
+    allowCard: true,
+    note: "التسعيرة: 750 بيسة بنكية = 1 ريال أوريدو. حوّل الرصيد على الرقم ثم ارفع إيصال التحويل، أو أرسل بطاقة أوريدو (صورة الرسالة أو رقم البطاقة) بدون إيصال.",
+    noteEn:
+      "Rate: 750 bank baisa = 1 Ooredoo rial. Transfer the balance to the number and upload the receipt, or send an Ooredoo card (photo or card number) instead.",
+    fields: [
+      { label: "رقم التحويل", value: "94052992" },
+      { label: "التسعيرة", value: "750 بيسة بنك = 1 ريال أوريدو" },
+    ],
+  },
 ];
+
 
 export function readPaymentMethods(settings: Record<string, unknown>): PaymentMethod[] {
   const raw = settings["paymentMethods"];
@@ -833,19 +852,29 @@ export function readPaymentMethods(settings: Record<string, unknown>): PaymentMe
   const clean = list
     .filter((m) => m && m.id && m.name)
     .map((m) => ({ ...m, fields: Array.isArray(m.fields) ? m.fields : [] }));
-  return (clean.length ? clean : DEFAULT_PAYMENT_METHODS).filter((m) => m.active !== false);
+  const base = clean.length ? clean : DEFAULT_PAYMENT_METHODS;
+  // Built-in methods added later stay available even for stores saved before them.
+  const merged = [...base, ...DEFAULT_PAYMENT_METHODS.filter((d) => !base.some((m) => m.id === d.id))];
+  return merged.filter((m) => m.active !== false);
 }
 
 export async function savePaymentMethods(methods: PaymentMethod[]) {
   await set(ref(getDb(), "settings/paymentMethods"), methods);
 }
 
-/** Writes the built-in methods (bank + Binance) once, if none were saved yet. */
+/** Writes the built-in methods once, and adds any newly bundled ones (e.g. Ooredoo). */
 export async function ensurePaymentMethods() {
   const snap = await get(ref(getDb(), "settings/paymentMethods"));
-  if (snap.exists()) return;
-  await savePaymentMethods(DEFAULT_PAYMENT_METHODS);
+  if (!snap.exists()) {
+    await savePaymentMethods(DEFAULT_PAYMENT_METHODS);
+    return;
+  }
+  const raw = snap.val();
+  const current: PaymentMethod[] = Array.isArray(raw) ? raw : Object.values(raw || {});
+  const missing = DEFAULT_PAYMENT_METHODS.filter((d) => !current.some((m) => m?.id === d.id));
+  if (missing.length) await savePaymentMethods([...current, ...missing]);
 }
+
 
 
 /* ============================ USERS / VISITS ============================ */

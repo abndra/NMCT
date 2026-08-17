@@ -18,10 +18,12 @@ import { Layout } from "@/components/site/Layout";
 import { useCart } from "@/lib/cart";
 import { useAuth, GoogleMark } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { useCurrency, toUsdt, OMR_TO_USDT } from "@/lib/currency";
+import { useCurrency, toUsdt, toOoredoo, moneyOoredoo, OMR_TO_USDT } from "@/lib/currency";
 import bankIcon from "@/assets/flag-oman.png";
 import binanceIcon from "@/assets/binance.png";
 import usdtIcon from "@/assets/usdt.png";
+import ooredooIcon from "@/assets/ooredoo.png";
+
 import { priceText } from "@/components/site/ProductCard";
 import {
   createOrder,
@@ -62,9 +64,11 @@ const inputCls =
 function methodLogo(m: PaymentMethod) {
   if (m.logo) return m.logo;
   if (m.icon === "binance") return binanceIcon;
+  if (m.icon === "ooredoo" || m.currency === "OOREDOO") return ooredooIcon;
   if (m.icon === "usdt" || m.currency === "USDT") return usdtIcon;
   return bankIcon;
 }
+
 
 function CheckoutPage() {
   const { t, lang, dir } = useI18n();
@@ -98,13 +102,36 @@ function CheckoutPage() {
   const [busy, setBusy] = useState(false);
   const [copiedKey, setCopiedKey] = useState("");
   const [methodId, setMethodId] = useState("");
+  const [payMode, setPayMode] = useState<"transfer" | "card">("transfer");
+  const [cardNumber, setCardNumber] = useState("");
 
   const methods = readPaymentMethods(settings);
   const method = methods.find((m) => m.id === methodId) || methods[0];
+  const allowCard = method?.allowCard === true || method?.currency === "OOREDOO";
+  const cardMode = allowCard && payMode === "card";
 
   useEffect(() => {
     if (!methodId && methods.length) setMethodId(methods[0]!.id);
   }, [methods.length]);
+
+  useEffect(() => {
+    setPayMode("transfer");
+    setCardNumber("");
+  }, [methodId]);
+
+  /** Amount text in the currency of the selected method. */
+  function amountText(m?: PaymentMethod) {
+    if (!m) return omr(total);
+    if (m.currency === "USDT") return usdt(total);
+    if (m.currency === "OOREDOO") return moneyOoredoo(total, lang);
+    return omr(total);
+  }
+  function amountRaw(m?: PaymentMethod) {
+    if (m?.currency === "USDT") return toUsdt(total).toFixed(2);
+    if (m?.currency === "OOREDOO") return toOoredoo(total).toFixed(2);
+    return total.toFixed(2);
+  }
+
 
   function copyLine(key: string, value: string) {
     navigator.clipboard?.writeText(value);
@@ -159,7 +186,16 @@ function CheckoutPage() {
       toast.error(lang === "ar" ? "أدخل رقم هاتف صحيح" : "Enter a valid phone number");
       return;
     }
-    if (!receipt) {
+    if (cardMode) {
+      if (!receipt && cardNumber.trim().length < 6) {
+        toast.error(
+          lang === "ar"
+            ? "أدخل رقم بطاقة أوريدو أو ارفع صورة الرسالة"
+            : "Enter the Ooredoo card number or upload a photo of the message",
+        );
+        return;
+      }
+    } else if (!receipt) {
       toast.error(lang === "ar" ? "ارفع صورة إيصال التحويل" : "Upload the transfer receipt");
       return;
     }
@@ -190,8 +226,13 @@ function CheckoutPage() {
         paymentMethod: method?.id || "bank",
         paymentMethodName: method ? method.name : "",
         paymentCurrency: method?.currency || "OMR",
+        paymentProof: cardMode ? "card" : "receipt",
+        cardNumber: cardMode ? cardNumber.trim() : "",
         totalUsdt: Number(toUsdt(total).toFixed(2)),
+        totalOoredoo: Number(toOoredoo(total).toFixed(2)),
+        amountToPay: amountRaw(method),
         receiptImage: receipt,
+
         discountCode: codeId ? code : "",
         discountAmount: discount,
         status: "pending",
@@ -406,10 +447,9 @@ function CheckoutPage() {
                             {lang === "ar" ? m.name : m.nameEn || m.name}
                           </span>
                           <span className="block text-[11px] text-muted-foreground">
-                            {m.currency === "USDT"
-                              ? usdt(total)
-                              : omr(total)}
+                            {amountText(m)}
                           </span>
+
                         </span>
                         {active && <Check className="ms-auto size-4 shrink-0 text-primary" />}
                       </button>
@@ -448,20 +488,19 @@ function CheckoutPage() {
                         <p className="text-[11px] text-muted-foreground">
                           {lang === "ar" ? "المبلغ المطلوب تحويله" : "Amount to transfer"}
                         </p>
-                        <p className="font-tech text-sm text-primary">
-                          {method.currency === "USDT" ? usdt(total) : omr(total)}
-                        </p>
+                        <p className="font-tech text-sm text-primary">{amountText(method)}</p>
+                        {method.currency === "OOREDOO" && (
+                          <p className="text-[11px] text-muted-foreground">
+                            {lang === "ar"
+                              ? `يعادل ${omr(total)} بنكياً — 750 بيسة بنك = 1 ريال أوريدو`
+                              : `Equals ${omr(total)} by bank — 750 bank baisa = 1 Ooredoo rial`}
+                          </p>
+                        )}
                       </div>
                       <button
                         type="button"
-                        onClick={() =>
-                          copyLine(
-                            "amount",
-                            method.currency === "USDT"
-                              ? toUsdt(total).toFixed(2)
-                              : total.toFixed(2),
-                          )
-                        }
+                        onClick={() => copyLine("amount", amountRaw(method))}
+
                         className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-accent px-3 text-xs text-accent"
                       >
                         {copiedKey === "amount" ? (
@@ -481,25 +520,72 @@ function CheckoutPage() {
                   </div>
                 )}
 
+                {allowCard && (
+                  <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-background/60 p-1">
+                    {(["transfer", "card"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setPayMode(mode)}
+                        className={`rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+                          payMode === mode
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {mode === "transfer"
+                          ? lang === "ar"
+                            ? "تحويل رصيد + إيصال"
+                            : "Balance transfer + receipt"
+                          : lang === "ar"
+                            ? "إرسال بطاقة أوريدو"
+                            : "Send an Ooredoo card"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <ol className="space-y-1 text-xs text-muted-foreground">
-                  <li>
-                    1.{" "}
-                    {lang === "ar"
-                      ? "انسخ بيانات الدفع وحوّل المبلغ الإجمالي."
-                      : "Copy the payment details and transfer the total."}
-                  </li>
-                  <li>
-                    2.{" "}
-                    {lang === "ar"
-                      ? "التقط صورة لإيصال التحويل."
-                      : "Take a screenshot of the receipt."}
-                  </li>
-                  <li>
-                    3.{" "}
-                    {lang === "ar"
-                      ? "ارفع الإيصال هنا ثم أكّد الطلب."
-                      : "Upload it here, then confirm the order."}
-                  </li>
+                  {cardMode ? (
+                    <>
+                      <li>
+                        1.{" "}
+                        {lang === "ar"
+                          ? `اشترِ بطاقة أوريدو بقيمة ${amountText(method)} أو أكثر.`
+                          : `Buy an Ooredoo card worth ${amountText(method)} or more.`}
+                      </li>
+                      <li>
+                        2.{" "}
+                        {lang === "ar"
+                          ? "اكتب رقم البطاقة هنا، أو صوّر رسالة البطاقة وارفعها."
+                          : "Type the card number here, or upload a photo of the card message."}
+                      </li>
+                      <li>
+                        3. {lang === "ar" ? "أكّد الطلب." : "Confirm the order."}
+                      </li>
+                    </>
+                  ) : (
+                    <>
+                      <li>
+                        1.{" "}
+                        {lang === "ar"
+                          ? "انسخ بيانات الدفع وحوّل المبلغ الإجمالي."
+                          : "Copy the payment details and transfer the total."}
+                      </li>
+                      <li>
+                        2.{" "}
+                        {lang === "ar"
+                          ? "التقط صورة لإيصال التحويل."
+                          : "Take a screenshot of the receipt."}
+                      </li>
+                      <li>
+                        3.{" "}
+                        {lang === "ar"
+                          ? "ارفع الإيصال هنا ثم أكّد الطلب."
+                          : "Upload it here, then confirm the order."}
+                      </li>
+                    </>
+                  )}
                 </ol>
 
                 {method?.id === "bank" && bankImage && (
@@ -507,6 +593,18 @@ function CheckoutPage() {
                     src={bankImage}
                     alt={lang === "ar" ? "بيانات الحساب البنكي" : "Bank account details"}
                     className="w-full rounded-2xl border border-border object-contain"
+                  />
+                )}
+
+                {cardMode && (
+                  <input
+                    className={inputCls}
+                    inputMode="numeric"
+                    value={cardNumber}
+                    onChange={(e) => setCardNumber(e.target.value)}
+                    placeholder={
+                      lang === "ar" ? "رقم بطاقة أوريدو (اختياري مع الصورة)" : "Ooredoo card number"
+                    }
                   />
                 )}
 
@@ -518,7 +616,13 @@ function CheckoutPage() {
                   ) : (
                     <>
                       <Upload className="size-5" />
-                      {lang === "ar" ? "ارفع صورة الإيصال" : "Upload receipt"}
+                      {cardMode
+                        ? lang === "ar"
+                          ? "ارفع صورة رسالة البطاقة (اختياري)"
+                          : "Upload the card message photo (optional)"
+                        : lang === "ar"
+                          ? "ارفع صورة الإيصال"
+                          : "Upload receipt"}
                     </>
                   )}
                   <input
@@ -531,6 +635,7 @@ function CheckoutPage() {
                     }}
                   />
                 </label>
+
               </div>
             </Section>
 
