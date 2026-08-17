@@ -393,15 +393,15 @@ function CheckoutPage() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label={`${t("name")} *`} value={name} onChange={setName} />
-                <label className="block">
+                <label className="block min-w-0">
                   <span className="mb-1 block text-xs text-muted-foreground">
                     {`${lang === "ar" ? "رقم للتواصل (واتساب)" : "Contact number (WhatsApp)"} *`}
                   </span>
-                  <div dir="ltr" className="flex items-stretch gap-2">
+                  <div dir="ltr" className="grid w-full grid-cols-[6.5rem_minmax(0,1fr)] items-stretch gap-2">
                     <select
                       value={cc}
                       onChange={(e) => setCc(e.target.value)}
-                      className={`${inputCls} w-[86px] shrink-0 px-1 text-center text-sm sm:w-[96px]`}
+                      className={`${inputCls} appearance-none px-2 text-center text-sm`}
                       aria-label={lang === "ar" ? "رمز الدولة" : "Country code"}
                     >
                       {DIAL_CODES.map((d) => (
@@ -415,10 +415,11 @@ function CheckoutPage() {
                       onChange={(e) => setPhone(e.target.value.replace(/[^\d\s-]/g, ""))}
                       inputMode="tel"
                       type="tel"
-                      className={`${inputCls} min-w-0 flex-1 text-base tracking-wide`}
+                      className={`${inputCls} text-base tracking-wide`}
                       placeholder="9xxxxxxx"
                     />
                   </div>
+
 
                   <span className="mt-1 block text-[11px] text-muted-foreground" dir="ltr">
                     +{cc} {phone.replace(/\D/g, "").replace(/^0+/, "")}
