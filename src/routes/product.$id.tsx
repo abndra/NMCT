@@ -109,9 +109,13 @@ function ProductPage() {
       <section className="mx-auto max-w-6xl px-4 py-6 sm:py-10">
         <div className="grid gap-6 md:grid-cols-2 md:gap-10">
           <div className="space-y-3">
-            <div className="relative aspect-4/5 overflow-hidden rounded-3xl glass-panel">
+            <div className="relative aspect-4/5 overflow-hidden rounded-3xl glass-panel p-3 sm:p-5">
               {gallery[active] ? (
-                <img src={gallery[active]} alt={name} className="size-full object-cover" />
+                <img
+                  src={gallery[active]}
+                  alt={name}
+                  className="block size-full max-h-full max-w-full object-contain object-center"
+                />
               ) : (
                 <div className="grid size-full place-items-center font-display text-5xl text-muted-foreground">GP</div>
               )}
@@ -129,7 +133,7 @@ function ProductPage() {
                     onClick={() => setActive(i)}
                     className={`size-20 shrink-0 overflow-hidden rounded-2xl border-2 ${i === active ? "border-primary" : "border-border"}`}
                   >
-                    <img src={g} alt="" className="size-full object-cover" />
+                    <img src={g} alt="" className="block size-full object-contain object-center p-1" />
                   </button>
                 ))}
               </div>

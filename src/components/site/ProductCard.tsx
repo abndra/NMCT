@@ -36,20 +36,20 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
         className="block w-full text-start"
         aria-label={name}
       >
-        <div className="relative aspect-4/5 overflow-hidden bg-secondary/50">
+        <div className="relative aspect-4/5 overflow-hidden bg-secondary/50 p-2 sm:p-3">
           {img ? (
             <img
               src={img}
               alt={name}
               loading="lazy"
-              className="size-full object-cover transition-transform duration-500 group-hover:scale-110"
+              className="block size-full max-h-full max-w-full object-contain object-center"
             />
           ) : (
             <div className="grid size-full place-items-center font-display text-3xl text-muted-foreground">
               GP
             </div>
           )}
-          <div className="absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-background to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-background/70 to-transparent" />
           {rank ? (
             <span className="absolute top-3 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 font-tech text-xs font-bold text-primary-foreground ltr:left-3 rtl:right-3">
               <Flame className="size-3" /> #{rank}
