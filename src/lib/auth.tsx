@@ -42,11 +42,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBusy(true);
     try {
       const res = await signInWithGoogle();
-      if (!res) {
-        // Mobile: the browser is being redirected to Google, nothing to confirm yet.
-        toast.info(lang === "ar" ? "جارٍ فتح تسجيل الدخول..." : "Opening sign-in...");
-        return;
-      }
       toast.success(lang === "ar" ? "تم تسجيل الدخول" : "Signed in");
       setDialog(false);
 
@@ -67,6 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               ? lang === "ar"
                 ? "أُغلقت نافذة جوجل قبل إكمال الدخول"
                 : "The Google window was closed before sign-in completed"
+              : code === "auth/popup-blocked"
+                ? lang === "ar"
+                  ? "من فضلك اسمح بالنوافذ المنبثقة لهذا الموقع ثم حاول مجدداً"
+                  : "Please allow pop-ups for this site, then try again"
+                : code === "auth/operation-not-supported-in-this-environment"
+                  ? lang === "ar"
+                    ? "افتح الموقع مباشرة في Safari أو Chrome لإكمال الدخول"
+                    : "Open this site directly in Safari or Chrome to sign in"
               : lang === "ar"
                 ? `تعذر تسجيل الدخول بجوجل${code ? ` (${code})` : ""}`
                 : `Google sign-in failed${code ? ` (${code})` : ""}`,

@@ -13,7 +13,7 @@ export function toUsdt(omr: number) {
 /** Formats an OMR amount in the requested currency. */
 export function money(omr: number, currency: Currency, lang: "ar" | "en") {
   const v = Number(omr || 0);
-  if (currency === "USDT") return `${toUsdt(v).toFixed(2)} USDT`;
+  if (currency === "USDT") return `$${toUsdt(v).toFixed(2)}`;
   return lang === "ar" ? `${v.toFixed(2)} ر.ع` : `OMR ${v.toFixed(2)}`;
 }
 

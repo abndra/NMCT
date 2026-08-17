@@ -16,12 +16,9 @@ import {
 import {
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,
   getRedirectResult,
   signOut,
   onAuthStateChanged,
-  setPersistence,
-  browserLocalPersistence,
   type User,
 } from "firebase/auth";
 import { getDb, getFbAuth } from "./firebase";
@@ -201,48 +198,19 @@ export type Unsub = () => void;
 /* ============================ AUTH ============================ */
 const DEFAULT_AVATAR = "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=nmct";
 
-/** True on phones/tablets and inside webviews where popups don't work. */
-function isMobileBrowser() {
-  if (typeof navigator === "undefined" || typeof window === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  const mobileUa = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|Mobile|Silk|FBAN|FBAV|Instagram|Line|Snapchat|TikTok/i.test(ua);
-  const iPadOS = /Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1;
-  const narrow = window.innerWidth < 820;
-  return mobileUa || iPadOS || narrow;
-}
-
 export async function signInWithGoogle() {
   const auth = getFbAuth();
-  try {
-    await setPersistence(auth, browserLocalPersistence);
-  } catch {
-    /* ignore */
-  }
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
 
-  // Phones (and in-app browsers such as Instagram / Facebook / TikTok) block
-  // or silently kill the Google popup, so they always use the redirect flow.
-  if (isMobileBrowser()) {
-    await signInWithRedirect(auth, provider);
-    return null;
-  }
-
-  try {
-    const res = await signInWithPopup(auth, provider);
-    await saveUser(res.user);
-    return res.user;
-  } catch (err) {
-    const code = (err as { code?: string })?.code;
-    if (
-      code === "auth/popup-blocked" ||
-      code === "auth/operation-not-supported-in-this-environment"
-    ) {
-      await signInWithRedirect(auth, provider);
-      return null;
-    }
-    throw err;
-  }
+  // Start the popup as the very first asynchronous operation. Safari and iOS
+  // revoke the click's user-activation permission after any preceding await,
+  // which previously caused either a silent failure or a lost redirect result.
+  // Firebase's browser default is durable local persistence, so no persistence
+  // operation is needed before opening the account chooser.
+  const res = await signInWithPopup(auth, provider);
+  await saveUser(res.user);
+  return res.user;
 }
 
 export async function handleRedirectResult() {

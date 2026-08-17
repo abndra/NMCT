@@ -84,13 +84,13 @@ export function Header() {
           >
             <img
               src={currency === "OMR" ? omanFlag : usdtIcon}
-              alt={currency === "OMR" ? "OMR" : "USDT"}
+              alt={currency === "OMR" ? "OMR" : "$"}
               loading="lazy"
               width={20}
               height={20}
               className="size-4 rounded-full object-contain sm:size-5"
             />
-            {currency === "OMR" ? (lang === "ar" ? "ر.ع" : "OMR") : "USDT"}
+            {currency === "OMR" ? (lang === "ar" ? "ر.ع" : "OMR") : "$"}
           </button>
 
           <button
