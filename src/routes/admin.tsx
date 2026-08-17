@@ -77,6 +77,9 @@ import {
   onProductsChange,
   unitList,
   onProductUnitsChange,
+  getUnits,
+  syncProductStock,
+  syncAllDigitalProductStocks,
   addStockUnits,
   deleteStockUnit,
   updateStockUnit,
@@ -362,7 +365,15 @@ function EditorScreen({
   );
 }
 
-function UnitsManager({ product, lang }: { product: Product; lang: string }) {
+function UnitsManager({
+  product,
+  lang,
+  onAvailableChange,
+}: {
+  product: Product;
+  lang: string;
+  onAvailableChange: (count: number) => void;
+}) {
   const ar = lang === "ar";
   const [items, setItems] = useState<StockUnit[]>([]);
   const [mode, setMode] = useState<"image" | "text">("text");
@@ -392,6 +403,10 @@ function UnitsManager({ product, lang }: { product: Product; lang: string }) {
           ? u.status === "disabled"
           : u.status !== "sold" && u.status !== "disabled",
   );
+
+  useEffect(() => {
+    onAvailableChange(available);
+  }, [available, onAvailableChange]);
 
   async function addRows() {
     const rows =
@@ -807,9 +822,18 @@ function ProductsTab() {
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft);
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
+  const [digitalStockCount, setDigitalStockCount] = useState(0);
+
+  useEffect(() => {
+    if (!products.length) return;
+    void syncAllDigitalProductStocks(products).catch((error) => {
+      console.error("[stock] automatic repair failed:", error);
+    });
+  }, [products]);
 
   function open(p: Product | "new") {
     setEditing(p);
+    setDigitalStockCount(p === "new" ? 0 : availableStock(p));
     setDraft(
       p === "new"
         ? emptyDraft
@@ -873,13 +897,17 @@ function ProductsTab() {
       : draft.stock === ""
         ? 0
         : Number(draft.stock);
-    if (editing !== "new" && editing && Number(editing.unitCount) > 0) {
-      // unit inventory is the source of truth — never overwrite it here
-      delete (payload as Partial<Product>).stock;
-      delete (payload as Partial<Product>).codes;
-    }
     try {
       let pid = editing !== "new" && editing ? editing.id : "";
+      if (pid && draft.digital) {
+        const privateUnits = await getUnits(pid);
+        if (Object.keys(privateUnits).length > 0) {
+          // Never trust a stale/missing public unitCount. The private vault is
+          // authoritative, so normal product saves must not reset stock to 0.
+          delete (payload as Partial<Product>).stock;
+          delete (payload as Partial<Product>).codes;
+        }
+      }
       if (editing === "new") {
         pid = (await addProduct({ ...payload, hidden: false, soldCount: 0, createdAt: Date.now() })) || "";
       } else if (editing) {
@@ -892,6 +920,7 @@ function ProductsTab() {
           typedCodes.map((c) => ({ code: c })),
         );
       }
+      if (pid && draft.digital) await syncProductStock(pid);
       toast.success(lang === "ar" ? "تم الحفظ" : "Saved");
       setEditing(null);
     } catch {
@@ -1097,7 +1126,11 @@ function ProductsTab() {
                   disabled={draft.digital}
                   value={
                     draft.digital
-                      ? String(draft.codes.split("\n").filter((c) => c.trim()).length)
+                      ? String(
+                          editing === "new"
+                            ? draft.codes.split("\n").filter((c) => c.trim()).length
+                            : digitalStockCount,
+                        )
                       : draft.stock
                   }
                   onChange={(e) => setDraft({ ...draft, stock: e.target.value })}
@@ -1157,7 +1190,11 @@ function ProductsTab() {
 
             {draft.digital &&
               (editing !== "new" && editing ? (
-                <UnitsManager product={editing} lang={lang} />
+                <UnitsManager
+                  product={editing}
+                  lang={lang}
+                  onAvailableChange={setDigitalStockCount}
+                />
               ) : (
                 <p className="text-xs text-accent">
                   {lang === "ar"

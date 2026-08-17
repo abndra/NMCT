@@ -58,6 +58,8 @@ export type Product = {
   units?: Record<string, StockUnit>;
   /** Number of tracked stock units (public counter, the units themselves are private). */
   unitCount?: number;
+  /** Number of tracked units currently available for sale. */
+  availableUnitCount?: number;
   /** Warn / show "آخر القطع" when the available stock drops to this number. */
   lowStockAt?: number;
   createdAt?: number;
@@ -571,6 +573,7 @@ export async function fulfillOrderWithReport(id: string): Promise<FulfillReport>
       const fresh = await getUnits(item.id);
       await update(pRef, {
         stock: availableUnits({ units: fresh }).length,
+        availableUnitCount: availableUnits({ units: fresh }).length,
         unitCount: Object.keys(fresh).length,
         soldCount: (Number(product.soldCount) || 0) + qty,
       });
@@ -686,6 +689,7 @@ export async function restoreOrderStock(id: string) {
       const fresh = await getUnits(item.id);
       await update(pRef, {
         stock: availableUnits({ units: fresh }).length,
+        availableUnitCount: availableUnits({ units: fresh }).length,
         unitCount: Object.keys(fresh).length,
         soldCount: Math.max(0, (Number(product.soldCount) || 0) - qty),
       });
@@ -1008,9 +1012,17 @@ export async function getUnits(productId: string): Promise<Record<string, StockU
 }
 /** Live inventory of one product (admin only — rules block everyone else). */
 export function onProductUnitsChange(productId: string, cb: (units: StockUnit[]) => void) {
-  return onValue(stockRef(productId), (snap) =>
-    cb(unitList({ units: snap.exists() ? (snap.val() as Record<string, StockUnit>) : {} })),
-  );
+  return onValue(stockRef(productId), (snap) => {
+    const units = snap.exists() ? (snap.val() as Record<string, StockUnit>) : {};
+    cb(unitList({ units }));
+
+    // The private stock vault is the source of truth. Repair the public counter
+    // whenever an admin opens the inventory or a unit changes, including older
+    // products whose stock/unitCount fields were previously left at zero.
+    void syncProductStockFromUnits(productId, units).catch((error) => {
+      console.error("[stock] public counter sync failed:", error);
+    });
+  });
 }
 
 /** Turns the units map into a sorted array. */
@@ -1031,10 +1043,19 @@ export function soldUnits(p: Pick<Product, "units">): StockUnit[] {
 
 /** Units a customer can actually buy right now (unit inventory is the source of truth). */
 export function availableStock(
-  p: Pick<Product, "digital" | "codes" | "stock" | "units">,
+  p: Pick<
+    Product,
+    "digital" | "codes" | "stock" | "units" | "unitCount" | "availableUnitCount"
+  >,
 ): number {
   if (p.units && Object.keys(p.units).length) return availableUnits(p).length;
+  if (p.digital && p.availableUnitCount !== undefined)
+    return Math.max(0, Number(p.availableUnitCount) || 0);
   if (p.digital && Array.isArray(p.codes) && p.codes.length) return p.codes.length;
+  // Compatibility repair for records created by the old broken sync: it wrote
+  // stock=0 while preserving the real tracked-unit count (the reported 13/0 case).
+  if (p.digital && Number(p.stock) <= 0 && Number(p.unitCount) > 0)
+    return Math.max(0, Number(p.unitCount) || 0);
   return Math.max(0, Number(p.stock) || 0);
 }
 
@@ -1072,9 +1093,45 @@ export async function deleteStockUnit(productId: string, unitId: string) {
 /** Keeps products/{id}/stock in sync with the number of available units. */
 export async function syncProductStock(productId: string) {
   const units = await getUnits(productId);
+  await syncProductStockFromUnits(productId, units);
+}
+
+/** Repairs every digital product counter from its private unit inventory. */
+export async function syncAllDigitalProductStocks(products: Product[]) {
+  await Promise.all(
+    products
+      .filter((product) => product.digital)
+      .map(async (product) => {
+        const units = await getUnits(product.id);
+        // An empty vault may be a legacy product that still uses stock/codes;
+        // do not erase that inventory during automatic repair.
+        if (Object.keys(units).length > 0) {
+          await syncProductStockFromUnits(product.id, units);
+        }
+      }),
+  );
+}
+
+async function syncProductStockFromUnits(
+  productId: string,
+  units: Record<string, StockUnit>,
+) {
   const total = Object.keys(units).length;
-  await update(ref(getDb(), "products/" + productId), {
-    stock: availableUnits({ units }).length,
+  const available = availableUnits({ units }).length;
+  const productRef = ref(getDb(), "products/" + productId);
+  const productSnap = await get(productRef);
+  const product = (productSnap.exists() ? productSnap.val() : {}) as Product;
+  if (
+    Number(product.stock) === available &&
+    Number(product.availableUnitCount) === available &&
+    Number(product.unitCount) === total &&
+    Array.isArray(product.codes) &&
+    product.codes.length === 0
+  )
+    return;
+  await update(productRef, {
+    stock: available,
+    availableUnitCount: available,
     unitCount: total,
     // never mirror secret codes into the public products node
     codes: [],
@@ -1093,13 +1150,27 @@ export async function migrateCodesToUnits(productId: string) {
   if (rows.length) await addStockUnits(productId, rows);
 }
 
-export function isOutOfStock(p: Pick<Product, "digital" | "codes" | "stock" | "units">) {
+export function isOutOfStock(
+  p: Pick<
+    Product,
+    "digital" | "codes" | "stock" | "units" | "unitCount" | "availableUnitCount"
+  >,
+) {
   return availableStock(p) <= 0;
 }
 
 /** True when stock is running out (defaults to 5 units or less). */
 export function isLowStock(
-  p: Pick<Product, "digital" | "codes" | "stock" | "lowStockAt" | "units">,
+  p: Pick<
+    Product,
+    | "digital"
+    | "codes"
+    | "stock"
+    | "lowStockAt"
+    | "units"
+    | "unitCount"
+    | "availableUnitCount"
+  >,
 ) {
   const left = availableStock(p);
   return left > 0 && left <= Math.max(1, Number(p.lowStockAt) || 5);
