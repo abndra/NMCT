@@ -6,9 +6,7 @@
  *   GET  /qr                -> HTML page with the pairing QR code
  *   POST /send  { to, message }  (Authorization: Bearer <TOKEN>)
  *
- * Also listens to incoming messages: replying "قبول <رقم الطلب>" / "رفض <رقم الطلب>"
- * (or just "قبول" / "رفض" to answer the last order sent to you) updates the order
- * in Firebase Realtime Database and delivers the digital codes to the customer.
+ * Outgoing notifications only — incoming admin replies are ignored.
  */
 import express from "express";
 import pino from "pino";
@@ -23,7 +21,6 @@ import {
 
 const TOKEN = process.env.TOKEN || "change-me";
 const PORT = process.env.PORT || 3000;
-const DB_URL = (process.env.FIREBASE_DB_URL || "").replace(/\/$/, "");
 const ADMIN_NUMBER = (process.env.ADMIN_NUMBER || "").replace(/\D/g, "");
 const SESSION_DIR = process.env.SESSION_DIR || "/data/session";
 
@@ -31,9 +28,6 @@ const log = pino({ level: "info" });
 let sock = null;
 let lastQR = "";
 let connected = false;
-/** last order announced to the admin, so a bare "قبول" still works */
-let lastOrderNo = "";
-
 const jid = (n) => `${String(n).replace(/\D/g, "")}@s.whatsapp.net`;
 
 async function start() {
@@ -58,103 +52,6 @@ async function start() {
     }
   });
 
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    for (const m of messages) {
-      if (m.key.fromMe || !m.message) continue;
-      const from = (m.key.remoteJid || "").split("@")[0];
-      if (ADMIN_NUMBER && !from.endsWith(ADMIN_NUMBER.slice(-8))) continue;
-      const text = (
-        m.message.conversation ||
-        m.message.extendedTextMessage?.text ||
-        ""
-      ).trim();
-      await handleAdminReply(text, m.key.remoteJid);
-    }
-  });
-}
-
-/* ------------------------- Firebase REST helpers ------------------------- */
-const fb = {
-  async get(path) {
-    const r = await fetch(`${DB_URL}/${path}.json`);
-    return r.ok ? await r.json() : null;
-  },
-  async patch(path, body) {
-    await fetch(`${DB_URL}/${path}.json`, { method: "PATCH", body: JSON.stringify(body) });
-  },
-};
-
-async function findOrderByNo(orderNo) {
-  const orders = (await fb.get("orders")) || {};
-  const wanted = String(orderNo).replace(/\D/g, "");
-  for (const [id, o] of Object.entries(orders)) {
-    const no = String(o.orderNo ?? o.number ?? id).replace(/\D/g, "");
-    if (no && wanted && no.endsWith(wanted)) return { id, ...o };
-  }
-  return null;
-}
-
-/** Pull one code per unit, decrement stock, mark order accepted. */
-async function fulfill(order) {
-  const delivered = [];
-  for (const item of order.items || []) {
-    const qty = Math.max(1, Number(item.qty) || 1);
-    const product = await fb.get(`products/${item.id}`);
-    if (!product) continue;
-    const update = {
-      stock: Math.max(0, (Number(product.stock) || 0) - qty),
-      soldCount: (Number(product.soldCount) || 0) + qty,
-    };
-    if (product.digital) {
-      const pool = Array.isArray(product.codes) ? [...product.codes] : [];
-      for (let i = 0; i < qty; i++) {
-        const code = pool.shift();
-        if (!code) break;
-        delivered.push({ productId: item.id, productName: item.name, code });
-      }
-      update.codes = pool;
-      update.stock = pool.length;
-    }
-    await fb.patch(`products/${item.id}`, update);
-  }
-  await fb.patch(`orders/${order.id}`, {
-    status: "accepted",
-    accepted: true,
-    updatedAt: Date.now(),
-    ...(delivered.length ? { deliveredCodes: delivered, deliveredAt: Date.now() } : {}),
-  });
-  return delivered;
-}
-
-async function handleAdminReply(text, adminJid) {
-  const accept = /^(قبول|قبل|accept|ok)\b/i.test(text);
-  const reject = /^(رفض|رفض الطلب|reject|no)\b/i.test(text);
-  if (!accept && !reject) return;
-
-  const num = (text.match(/\d{3,}/) || [])[0] || lastOrderNo;
-  if (!num) return void send(adminJid, "أرسل: قبول <رقم الطلب> أو رفض <رقم الطلب>");
-
-  const order = await findOrderByNo(num);
-  if (!order) return void send(adminJid, `لم أجد طلباً بالرقم ${num}`);
-
-  if (accept) {
-    const codes = await fulfill(order);
-    if (order.phone) {
-      const body = codes.length
-        ? [`✅ تم قبول طلبك رقم #${num}`, "", ...codes.map((c) => `• ${c.productName}: ${c.code}`), "", "شكراً لثقتك بـ NMCT 💚"]
-        : [`✅ تم قبول طلبك رقم #${num}`, "سيتم التواصل معك لإتمام التسليم.", "", "NMCT 💚"];
-      await send(jid(order.phone), body.join("\n"));
-    }
-    await send(adminJid, `تم قبول الطلب #${num}${codes.length ? ` وإرسال ${codes.length} كود للعميل` : ""} ✅`);
-  } else {
-    await fb.patch(`orders/${order.id}`, {
-      status: "rejected",
-      rejected: true,
-      updatedAt: Date.now(),
-    });
-    if (order.phone) await send(jid(order.phone), `❌ نعتذر، تم رفض طلبك رقم #${num}. للاستفسار راسلنا.`);
-    await send(adminJid, `تم رفض الطلب #${num} ❌`);
-  }
 }
 
 async function send(to, message) {
