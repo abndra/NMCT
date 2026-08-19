@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Search,
   PackageSearch,
   Clock,
   CheckCircle2,
@@ -22,7 +21,7 @@ import { useAuth, GoogleMark } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "@/lib/currency";
 import { onMyOrdersChange, formatOrderNo, statusLabel, ORDER_STATUSES, type Order } from "@/lib/db";
-import { getDeviceId, getMyOrderIds, getMyPhones, rememberPhone, phoneKey } from "@/lib/device";
+import { getDeviceId, getMyOrderIds } from "@/lib/device";
 import { priceText } from "@/components/site/ProductCard";
 
 export const Route = createFileRoute("/orders")({
@@ -58,8 +57,6 @@ function OrdersPage() {
   const { t, lang } = useI18n();
   const { fmt } = useCurrency();
   const { user, promptLogin } = useAuth();
-  const [phone, setPhone] = useState("");
-  const [phones, setPhones] = useState<string[]>([]);
   const [device, setDevice] = useState("");
   const [ids, setIds] = useState<string[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -91,16 +88,13 @@ function OrdersPage() {
   useEffect(() => {
     setDevice(getDeviceId());
     setIds(getMyOrderIds());
-    const saved = getMyPhones();
-    setPhones(saved);
-    if (saved[0]) setPhone(saved[0]);
   }, []);
 
   useEffect(() => {
     if (!device) return;
     let unsub = () => {};
     try {
-      unsub = onMyOrdersChange({ deviceId: device, orderIds: ids, phones, uid: user?.uid || "" }, (items) => {
+      unsub = onMyOrdersChange({ deviceId: device, orderIds: ids, uid: user?.uid || "" }, (items) => {
         setOrders(items);
         setReady(true);
       });
@@ -108,7 +102,7 @@ function OrdersPage() {
       setReady(true);
     }
     return () => unsub();
-  }, [device, ids, phones, user?.uid]);
+  }, [device, ids, user?.uid]);
 
   const list = useMemo(() => {
     if (tab === "active")
@@ -118,22 +112,14 @@ function OrdersPage() {
     return orders;
   }, [orders, tab]);
 
-  function search(e: React.FormEvent) {
-    e.preventDefault();
-    const key = phoneKey(phone);
-    if (key.length < 5) return;
-    rememberPhone(phone);
-    setPhones(getMyPhones());
-  }
-
   return (
     <Layout>
       <section className="mx-auto max-w-4xl px-4 py-12">
         <h1 className="font-display text-4xl">{t("trackOrders")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {lang === "ar"
-            ? "طلباتك المرتبطة بحسابك تظهر تلقائياً في أي جهاز. يمكنك أيضاً البحث برقم الهاتف."
-            : "Orders linked to your account appear on any device. You can also search by phone."}
+            ? "طلباتك تظهر تلقائياً حسب هذا الجهاز، وإذا سجّلت الدخول بحساب جوجل ستظهر في أي جهاز."
+            : "Your orders appear automatically for this device, and on any device when you sign in with Google."}
         </p>
 
         {!user && (
@@ -152,21 +138,6 @@ function OrdersPage() {
             </button>
           </div>
         )}
-
-        <form className="mt-6 flex gap-2" onSubmit={search}>
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            inputMode="tel"
-            dir="ltr"
-            placeholder={t("enterPhone")}
-            className="h-12 flex-1 rounded-xl border border-border bg-card/60 px-4 outline-none focus:border-primary"
-          />
-          <button className="inline-flex h-12 items-center gap-2 rounded-xl bg-primary px-5 font-display text-primary-foreground">
-            <Search className="size-4" />
-            {t("track")}
-          </button>
-        </form>
 
         <div className="mt-5 flex gap-2">
           {(
