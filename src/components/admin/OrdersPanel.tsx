@@ -9,6 +9,10 @@ import {
   Clock,
   Copy,
   MessageCircle,
+  PackageCheck,
+  PenLine,
+  Send,
+
   Phone,
   Search,
   Trash2,
@@ -18,6 +22,8 @@ import {
 import {
   ORDER_STATUSES,
   deliverOrder,
+  deliverOrderManual,
+
   waNumber,
   revertOrderToPending,
   deleteOrder,
@@ -294,7 +300,41 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
   const { lang, dir } = useI18n();
   const [reason, setReason] = useState(o.rejectionReason || "");
   const [busy, setBusy] = useState(false);
+  const [deliverMode, setDeliverMode] = useState<null | "choose" | "manual">(null);
+  const [manualText, setManualText] = useState(o.manualDeliveryText || "");
   const Back = dir === "rtl" ? ArrowRight : ArrowLeft;
+
+  const manualLines = manualText.split(/\r?\n/).filter((l) => l.trim()).length;
+
+  async function sendManual() {
+    const body = manualText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .slice(0, 10)
+      .join("\n");
+    if (!body) {
+      toast.error(lang === "ar" ? "اكتب نص التسليم أولاً" : "Write the delivery text first");
+      return;
+    }
+    setBusy(true);
+    try {
+      const codes = await deliverOrderManual(o.id, body);
+      const r = await notifyOrderDelivered({ ...o, deliveredCodes: codes }, codes);
+      if (r.ok) toast.success(lang === "ar" ? "تم التسليم وإرسال النص على واتساب ✅" : "Delivered and sent on WhatsApp ✅");
+      else
+        toast.success(
+          (lang === "ar" ? "تم التسليم — لكن لم تُرسل رسالة الواتساب: " : "Delivered — WhatsApp failed: ") +
+            (r.error || ""),
+        );
+      setDeliverMode(null);
+    } catch {
+      toast.error(lang === "ar" ? "تعذر التسليم" : "Delivery failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
 
   async function run(fn: () => Promise<void>, msg: string) {
     setBusy(true);
@@ -489,14 +529,17 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
             <button
               key={s.key}
               disabled={busy}
-              onClick={() =>
+              onClick={() => {
+                if (s.key === "delivered") {
+                  setDeliverMode("choose");
+                  return;
+                }
                 void run(
-                  () =>
-                    s.key === "delivered" ? markReceived(o) : revertOrderToPending(o.id),
+                  () => revertOrderToPending(o.id),
                   (lang === "ar" ? "تم تحديث الحالة إلى " : "Status set to ") +
                     statusLabel(s.key, lang),
-                )
-              }
+                );
+              }}
               className={`h-11 rounded-xl border px-4 text-sm ${
                 o.status === s.key
                   ? "border-primary bg-primary text-primary-foreground"
@@ -507,6 +550,95 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
             </button>
           ))}
         </div>
+
+        {deliverMode === "choose" && (
+          <div className="space-y-3 rounded-xl border border-primary/40 bg-primary/5 p-3">
+            <p className="font-display text-sm text-primary">
+              {lang === "ar" ? "كيف تريد تسليم هذا الطلب؟" : "How do you want to deliver?"}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                disabled={busy}
+                onClick={() =>
+                  void run(
+                    () => markReceived(o),
+                    lang === "ar" ? "تم التسليم من المخزون" : "Delivered from stock",
+                  ).then(() => setDeliverMode(null))
+                }
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-4 font-display text-sm text-primary-foreground disabled:opacity-60"
+              >
+                <PackageCheck className="size-4" />
+                {lang === "ar" ? "تسليم من المخزون" : "Deliver from stock"}
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => setDeliverMode("manual")}
+                className="inline-flex h-11 items-center gap-2 rounded-xl border border-accent px-4 font-display text-sm text-accent"
+              >
+                <PenLine className="size-4" />
+                {lang === "ar" ? "تسليم يدوي" : "Manual delivery"}
+              </button>
+              <button
+                onClick={() => setDeliverMode(null)}
+                className="h-11 rounded-xl border border-border px-4 text-sm text-muted-foreground"
+              >
+                {lang === "ar" ? "إلغاء" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {deliverMode === "manual" && (
+          <div className="space-y-3 rounded-xl border border-accent/40 bg-accent/5 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-display text-sm text-accent">
+                {lang === "ar" ? "نص التسليم اليدوي" : "Manual delivery text"}
+              </p>
+              <span
+                className={`font-tech text-xs ${manualLines > 10 ? "text-destructive" : "text-muted-foreground"}`}
+              >
+                {manualLines}/10
+              </span>
+            </div>
+            <textarea
+              value={manualText}
+              onChange={(e) => {
+                const lines = e.target.value.split(/\r?\n/);
+                setManualText(lines.length > 10 ? lines.slice(0, 10).join("\n") : e.target.value);
+              }}
+              rows={10}
+              dir="auto"
+              placeholder={
+                lang === "ar"
+                  ? "اكتب أي نص للعميل (حتى 10 سطور): كود، بيانات حساب، رابط، تعليمات..."
+                  : "Write any text for the customer (up to 10 lines)"
+              }
+              className="w-full rounded-xl border border-border bg-background/60 p-3 text-sm leading-6 outline-none focus:border-accent"
+            />
+            <p className="text-xs text-muted-foreground">
+              {lang === "ar"
+                ? "سيظهر النص في صفحة «طلباتي» للعميل ويُرسل له على الواتساب. لا يُخصم أي مخزون."
+                : "Shown on the customer's orders page and sent on WhatsApp. Stock is untouched."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                disabled={busy}
+                onClick={() => void sendManual()}
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-5 font-display text-sm text-accent-foreground disabled:opacity-60"
+              >
+                <Send className="size-4" />
+                {lang === "ar" ? "إرسال" : "Send"}
+              </button>
+              <button
+                onClick={() => setDeliverMode("choose")}
+                className="h-11 rounded-xl border border-border px-4 text-sm text-muted-foreground"
+              >
+                {lang === "ar" ? "رجوع" : "Back"}
+              </button>
+            </div>
+          </div>
+        )}
+
 
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
           <input

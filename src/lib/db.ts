@@ -149,7 +149,11 @@ export type Order = {
   statusHistory?: { status: string; at: number }[];
   /** Digital codes handed to the customer once the order was accepted. */
   deliveredCodes?: DeliveredCode[];
+  /** True when the admin typed the delivered content by hand. */
+  manualDelivery?: boolean;
+  manualDeliveryText?: string;
   deliveredAt?: number;
+
   updatedAt?: number;
   createdAt: number;
 };
@@ -652,6 +656,43 @@ export async function deliverOrder(id: string): Promise<FulfillReport> {
   await updateOrderStatus(id, "delivered");
   return report;
 }
+
+/**
+ * Manual delivery: the admin writes the content by hand (up to 10 lines) instead
+ * of pulling it from the dashboard inventory. Stock is left untouched.
+ */
+export async function deliverOrderManual(
+  id: string,
+  text: string,
+): Promise<DeliveredCode[]> {
+  const db = getDb();
+  const body = String(text || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 10)
+    .join("\n");
+  const snap = await get(ref(db, "orders/" + id));
+  const order = snap.exists() ? ({ id, ...(snap.val() as object) } as Order) : null;
+  const name = order?.items?.[0]?.name || "تسليم يدوي";
+  const delivered: DeliveredCode[] = [
+    {
+      productId: order?.items?.[0]?.id || "",
+      productName: name,
+      code: body,
+      kind: "text",
+    },
+  ];
+  await update(ref(db, "orders/" + id), {
+    deliveredCodes: delivered,
+    deliveredAt: Date.now(),
+    manualDelivery: true,
+    manualDeliveryText: body,
+  });
+  await updateOrderStatus(id, "delivered");
+  return delivered;
+}
+
 
 /** Puts a delivered order back to pending and returns its units to the stock. */
 export async function revertOrderToPending(id: string) {
