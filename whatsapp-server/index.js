@@ -18,6 +18,7 @@ import {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
 } from "@whiskeysockets/baileys";
+import { initDelivery, deliveryReady, deliveryError, handleDeliver } from "./deliver.js";
 
 const TOKEN = process.env.TOKEN || "change-me";
 const PORT = process.env.PORT || 3000;
@@ -78,6 +79,16 @@ app.get("/status", (req, res) =>
     connected,
     status: connected ? "connected" : lastQR ? "waiting-qr" : "connecting",
     qr: connected ? "" : lastQR,
+    autoDelivery: deliveryReady(),
+    autoDeliveryError: deliveryReady() ? "" : deliveryError(),
+  }),
+);
+
+/** التسليم الفوري للطلبات المدفوعة من الرصيد (يتحقق من هوية المشتري بنفسه). */
+app.post("/deliver", auth, (req, res) =>
+  handleDeliver(req, res, { send, adminNumber: ADMIN_NUMBER, log }).catch((e) => {
+    log.error(e);
+    if (!res.headersSent) res.status(500).json({ error: String(e?.message || e) });
   }),
 );
 
@@ -133,5 +144,6 @@ app.post("/send", auth, async (req, res) => {
   }
 });
 
+initDelivery(log);
 app.listen(PORT, () => log.info(`HTTP on :${PORT}`));
 start().catch((e) => log.error(e));
