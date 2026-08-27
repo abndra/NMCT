@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { Layout } from "@/components/site/Layout";
 import { OrdersPanel } from "@/components/admin/OrdersPanel";
+import { TopupsPanel } from "@/components/admin/TopupsPanel";
+import { UsersPanel } from "@/components/admin/UsersPanel";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { useCategories, useProducts, useSettings } from "@/hooks/use-store-data";
@@ -110,6 +112,8 @@ const TABS = [
   "products",
   "categories",
   "orders",
+  "topups",
+  "users",
   "coupons",
   "news",
   "settings",
@@ -122,6 +126,8 @@ const TAB_LABELS: Record<Tab, [string, string]> = {
   products: ["المنتجات", "Products"],
   categories: ["الأقسام", "Categories"],
   orders: ["الطلبات", "Orders"],
+  topups: ["طلبات الشحن", "Top-ups"],
+  users: ["المستخدمون", "Users"],
   coupons: ["أكواد الخصم", "Coupons"],
   news: ["الإعلانات", "Announcements"],
   settings: ["الإعدادات", "Settings"],
@@ -133,6 +139,8 @@ const TAB_ICONS: Record<Tab, React.ReactNode> = {
   products: <Boxes />,
   categories: <FolderTree />,
   orders: <PackageCheck />,
+  topups: <Wallet />,
+  users: <Users />,
   coupons: <Percent />,
   news: <Megaphone />,
   settings: <Settings2 />,
@@ -285,6 +293,8 @@ function AdminPage() {
             {tab === "products" && <ProductsTab />}
             {tab === "categories" && <CategoriesTab />}
             {tab === "orders" && <OrdersTab />}
+            {tab === "topups" && <TopupsPanel />}
+            {tab === "users" && <UsersPanel />}
             {tab === "coupons" && <CouponsTab />}
             {tab === "news" && <NewsTab />}
             {tab === "settings" && <SettingsTab />}
@@ -1735,12 +1745,21 @@ function SettingsTab() {
                       ? " — ⚠️ التوكن غير مطابق للسيرفر، لن تُرسل أي رسالة"
                       : " — ⚠️ token mismatch, messages will fail"
                     : "";
+                const delivery = st.autoDelivery
+                  ? lang === "ar"
+                    ? " — التسليم الفوري مُفعّل ⚡"
+                    : " — instant delivery ON ⚡"
+                  : lang === "ar"
+                    ? " — التسليم الفوري غير مُفعّل (أضف FIREBASE_SERVICE_ACCOUNT للسيرفر)"
+                    : " — instant delivery OFF (set FIREBASE_SERVICE_ACCOUNT)";
                 setWaState(
                   (st.connected
                     ? lang === "ar"
                       ? "متصل ✅"
                       : "Connected ✅"
-                    : String(st.status || (lang === "ar" ? "غير متصل" : "Disconnected"))) + tokenBad,
+                    : String(st.status || (lang === "ar" ? "غير متصل" : "Disconnected"))) +
+                    tokenBad +
+                    delivery,
                 );
               } catch {
                 setWaState(lang === "ar" ? "تعذر الوصول للسيرفر ❌" : "Unreachable ❌");

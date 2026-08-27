@@ -1450,6 +1450,9 @@ export type WaStatus = {
   error?: string;
   /** false when the saved token is rejected by the server (HTTP 401). */
   tokenOk?: boolean;
+  /** true when the server can deliver wallet orders automatically (Firebase Admin configured). */
+  autoDelivery?: boolean;
+  autoDeliveryError?: string;
 };
 
 /** Confirms the token is the one the Railway server was deployed with. */

@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Menu, Search, ShoppingCart, Heart, Globe, UserRound } from "lucide-react";
+import { Menu, Search, ShoppingCart, Heart, Globe, UserRound, Wallet } from "lucide-react";
 import { useState } from "react";
 import { siteLogo } from "@/lib/assets";
 import { useI18n } from "@/lib/i18n";
@@ -9,12 +9,14 @@ import usdtIcon from "@/assets/usdt.png";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
+import { useBalance } from "@/hooks/use-wallet";
 
 export function Header() {
   const { t, lang, toggle } = useI18n();
-  const { currency, toggle: toggleCurrency } = useCurrency();
+  const { currency, toggle: toggleCurrency, fmt } = useCurrency();
   const { count, setOpen, wishlist } = useCart();
   const { user, promptLogin, signOut } = useAuth();
+  const { balance } = useBalance();
 
   const [q, setQ] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -25,6 +27,7 @@ export function Header() {
     { to: "/", label: t("home") },
     { to: "/store", label: t("store") },
     { to: "/orders", label: t("trackOrders") },
+    { to: "/wallet", label: lang === "ar" ? "محفظتي" : "Wallet" },
   ];
 
   return (
@@ -76,6 +79,17 @@ export function Header() {
         </form>
 
         <div className="ms-auto flex items-center gap-1.5 sm:gap-2">
+          {user && (
+            <Link
+              to="/wallet"
+              title={lang === "ar" ? "رصيدي" : "My balance"}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2 font-tech text-[10px] text-primary sm:h-10 sm:rounded-xl sm:px-3 sm:text-xs"
+            >
+              <Wallet className="size-3.5 sm:size-4" />
+              {fmt(balance)}
+            </Link>
+          )}
+
           <button
             onClick={toggleCurrency}
             title={lang === "ar" ? "تغيير العملة" : "Change currency"}

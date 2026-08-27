@@ -14,6 +14,8 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as StoreRouteImport } from './routes/store'
+import { Route as TopupRouteImport } from './routes/topup'
+import { Route as WalletRouteImport } from './routes/wallet'
 import { Route as ProductIdRouteImport } from './routes/product.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -41,6 +43,16 @@ const StoreRoute = StoreRouteImport.update({
   path: '/store',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TopupRoute = TopupRouteImport.update({
+  id: '/topup',
+  path: '/topup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WalletRoute = WalletRouteImport.update({
+  id: '/wallet',
+  path: '/wallet',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductIdRoute = ProductIdRouteImport.update({
   id: '/product/$id',
   path: '/product/$id',
@@ -53,6 +65,8 @@ export interface FileRoutesByFullPath {
   '/checkout': typeof CheckoutRoute
   '/orders': typeof OrdersRoute
   '/store': typeof StoreRoute
+  '/topup': typeof TopupRoute
+  '/wallet': typeof WalletRoute
   '/product/$id': typeof ProductIdRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +75,8 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/orders': typeof OrdersRoute
   '/store': typeof StoreRoute
+  '/topup': typeof TopupRoute
+  '/wallet': typeof WalletRoute
   '/product/$id': typeof ProductIdRoute
 }
 export interface FileRoutesById {
@@ -70,14 +86,31 @@ export interface FileRoutesById {
   '/checkout': typeof CheckoutRoute
   '/orders': typeof OrdersRoute
   '/store': typeof StoreRoute
+  '/topup': typeof TopupRoute
+  '/wallet': typeof WalletRoute
   '/product/$id': typeof ProductIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/admin' | '/checkout' | '/orders' | '/store' | '/product/$id'
+    | '/'
+    | '/admin'
+    | '/checkout'
+    | '/orders'
+    | '/store'
+    | '/topup'
+    | '/wallet'
+    | '/product/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/checkout' | '/orders' | '/store' | '/product/$id'
+  to:
+    | '/'
+    | '/admin'
+    | '/checkout'
+    | '/orders'
+    | '/store'
+    | '/topup'
+    | '/wallet'
+    | '/product/$id'
   id:
     | '__root__'
     | '/'
@@ -85,6 +118,8 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/orders'
     | '/store'
+    | '/topup'
+    | '/wallet'
     | '/product/$id'
   fileRoutesById: FileRoutesById
 }
@@ -94,6 +129,8 @@ export interface RootRouteChildren {
   CheckoutRoute: typeof CheckoutRoute
   OrdersRoute: typeof OrdersRoute
   StoreRoute: typeof StoreRoute
+  TopupRoute: typeof TopupRoute
+  WalletRoute: typeof WalletRoute
   ProductIdRoute: typeof ProductIdRoute
 }
 
@@ -134,6 +171,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StoreRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/topup': {
+      id: '/topup'
+      path: '/topup'
+      fullPath: '/topup'
+      preLoaderRoute: typeof TopupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/wallet': {
+      id: '/wallet'
+      path: '/wallet'
+      fullPath: '/wallet'
+      preLoaderRoute: typeof WalletRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/product/$id': {
       id: '/product/$id'
       path: '/product/$id'
@@ -150,6 +201,8 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutRoute: CheckoutRoute,
   OrdersRoute: OrdersRoute,
   StoreRoute: StoreRoute,
+  TopupRoute: TopupRoute,
+  WalletRoute: WalletRoute,
   ProductIdRoute: ProductIdRoute,
 }
 export const routeTree = rootRouteImport

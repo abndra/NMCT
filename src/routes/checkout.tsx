@@ -1,19 +1,14 @@
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowRight,
   ArrowLeft,
   BadgePercent,
-  Banknote,
   Check,
-  Copy,
-  Loader2,
   Plus,
-  Upload,
   User,
   Wallet,
-  X,
   Zap,
 } from "lucide-react";
 
@@ -21,36 +16,21 @@ import { Layout } from "@/components/site/Layout";
 import { useCart } from "@/lib/cart";
 import { useAuth, GoogleMark } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import {
-  useCurrency,
-  toUsdt,
-  toOoredoo,
-  moneyOoredoo,
-  ooredooCardAmount,
-  OMR_TO_USDT,
-} from "@/lib/currency";
-
-import bankIcon from "@/assets/flag-oman.png";
-import binanceIcon from "@/assets/binance.png";
-import usdtIcon from "@/assets/usdt.png";
-import ooredooIcon from "@/assets/ooredoo.png";
-
-import { priceText } from "@/components/site/ProductCard";
+import { useCurrency, toUsdt, toOoredoo, OMR_TO_USDT } from "@/lib/currency";
 import {
   createOrder,
   validateDiscountCode,
   incrementDiscountUsage,
-  notifyNewOrder,
   DEFAULT_COUNTRY_CODE,
   waNumber,
   formatOrderNo,
-  readPaymentMethods,
-  type PaymentMethod,
   checkCartStock,
 } from "@/lib/db";
+import { chargeBalance, logPurchase, notifyWalletOrder, refundBalance } from "@/lib/wallet";
+import { requestInstantDelivery, instantDeliveryHint } from "@/lib/delivery";
+import { useBalance } from "@/hooks/use-wallet";
 
 import { DIAL_CODES } from "@/lib/country-codes";
-import { uploadImage } from "@/lib/uploads";
 import { useSettings } from "@/hooks/use-store-data";
 
 export const Route = createFileRoute("/checkout")({
@@ -59,10 +39,10 @@ export const Route = createFileRoute("/checkout")({
       { title: "إتمام الطلب | NMCT" },
       {
         name: "description",
-        content: "أكمل طلبك الرقمي في NMCT: أكواد خصم، تحويل بنكي، وتسليم فوري داخل الموقع.",
+        content: "أكمل طلبك الرقمي في NMCT بالدفع من رصيد محفظتك مع تسليم داخل الموقع.",
       },
       { property: "og:title", content: "إتمام الطلب | NMCT" },
-      { property: "og:description", content: "منتجات رقمية بتسليم فوري داخل الموقع." },
+      { property: "og:description", content: "ادفع من رصيدك واستلم منتجك داخل الموقع." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -73,92 +53,37 @@ export const Route = createFileRoute("/checkout")({
 const inputCls =
   "h-12 w-full rounded-xl border border-border bg-background/60 px-3 text-sm outline-none transition-colors focus:border-primary";
 
-function methodLogo(m: PaymentMethod) {
-  if (m.logo) return m.logo;
-  if (m.icon === "binance") return binanceIcon;
-  if (m.icon === "ooredoo" || m.currency === "OOREDOO") return ooredooIcon;
-  if (m.icon === "usdt" || m.currency === "USDT") return usdtIcon;
-  return bankIcon;
-}
-
-
 function CheckoutPage() {
   const { t, lang, dir } = useI18n();
   const { fmt, omr, usdt } = useCurrency();
   const { lines, subtotal, clear } = useCart();
   const { user, promptLogin } = useAuth();
+  const { balance } = useBalance();
   const navigate = useNavigate();
   const router = useRouter();
   const settings = useSettings();
+
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [cc, setCc] = useState(DEFAULT_COUNTRY_CODE);
+  const [note, setNote] = useState("");
+  const [code, setCode] = useState("");
+  const [discount, setDiscount] = useState(0);
+  const [codeId, setCodeId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const saved = String(settings["countryCode"] || "").replace(/\D/g, "");
     if (saved && DIAL_CODES.some((d) => d.code === saved)) setCc(saved);
   }, [settings["countryCode"]]);
 
-  const bank = (settings["bank"] as Record<string, string> | undefined) || {};
-  const bankName = bank["name"] || "بنك مسقط";
-  const bankAccount = bank["account"] || "97825550";
-  const bankHolder = bank["holder"] || "NMCT";
-  const bankImage = bank["image"] || "";
-
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [cc, setCc] = useState(DEFAULT_COUNTRY_CODE);
-  const [note, setNote] = useState("");
-  const [receipts, setReceipts] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-
-  const [code, setCode] = useState("");
-  const [discount, setDiscount] = useState(0);
-  const [codeId, setCodeId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [copiedKey, setCopiedKey] = useState("");
-  const [methodId, setMethodId] = useState("");
-  const [payMode, setPayMode] = useState<"transfer" | "card">("transfer");
-  const [cardNumbers, setCardNumbers] = useState<string[]>([""]);
-
-  const methods = readPaymentMethods(settings);
-  const method = methods.find((m) => m.id === methodId) || methods[0];
-  const allowCard = method?.allowCard === true || method?.currency === "OOREDOO";
-  const cardMode = allowCard && payMode === "card";
-
-  useEffect(() => {
-    if (!methodId && methods.length) setMethodId(methods[0]!.id);
-  }, [methods.length]);
-
-  useEffect(() => {
-    setPayMode("transfer");
-    setCardNumbers([""]);
-  }, [methodId]);
-
-  /** Amount text in the currency of the selected method. */
-  function amountText(m?: PaymentMethod, card = cardMode) {
-    if (!m) return omr(total);
-    if (m.currency === "USDT") return usdt(total);
-    if (m.currency === "OOREDOO") return moneyOoredoo(total, lang, card);
-    return omr(total);
-  }
-  function amountRaw(m?: PaymentMethod, card = cardMode) {
-    if (m?.currency === "USDT") return toUsdt(total).toFixed(2);
-    if (m?.currency === "OOREDOO")
-      return (card ? ooredooCardAmount(total) : toOoredoo(total)).toFixed(2);
-    return total.toFixed(2);
-  }
-
-
-
-  function copyLine(key: string, value: string) {
-    navigator.clipboard?.writeText(value);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(""), 1500);
-  }
-
   useEffect(() => {
     if (user?.displayName && !name) setName(user.displayName);
   }, [user, name]);
 
   const total = Math.max(0, subtotal - discount);
+  const missing = Math.max(0, Number((total - balance).toFixed(3)));
+  const enough = missing <= 0;
   const BackIcon = dir === "rtl" ? ArrowRight : ArrowLeft;
 
   async function applyCode() {
@@ -175,22 +100,6 @@ function CheckoutPage() {
     toast.success(t("couponApplied"));
   }
 
-  async function pickReceipts(files: File[]) {
-    if (!files.length) return;
-    setUploading(true);
-    try {
-      const urls: string[] = [];
-      for (const f of files.slice(0, 10)) urls.push(await uploadImage(f, "nmct_receipts"));
-      setReceipts((prev) => [...prev, ...urls].slice(0, 10));
-      toast.success(lang === "ar" ? "تم رفع الصور" : "Images uploaded");
-    } catch {
-      toast.error(lang === "ar" ? "تعذر رفع الصورة" : "Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-
   async function submit() {
     if (!user) {
       promptLogin();
@@ -204,24 +113,16 @@ function CheckoutPage() {
       toast.error(lang === "ar" ? "أدخل رقم هاتف صحيح" : "Enter a valid phone number");
       return;
     }
-    const codes = cardNumbers.map((c) => c.trim()).filter((c) => c.length >= 4);
-    if (cardMode) {
-      if (!receipts.length && !codes.length) {
-        toast.error(
-          lang === "ar"
-            ? "أدخل رقم بطاقة أوريدو واحد على الأقل أو ارفع صورة الرسالة"
-            : "Enter at least one Ooredoo card number or upload a card photo",
-        );
-        return;
-      }
-    } else if (!receipts.length) {
-      toast.error(lang === "ar" ? "ارفع صورة إيصال التحويل" : "Upload the transfer receipt");
+    if (!enough) {
+      toast.error(
+        lang === "ar" ? `رصيدك غير كافٍ — تحتاج ${omr(missing)}` : `Not enough balance — ${omr(missing)} more`,
+      );
+      navigate({ to: "/topup" });
       return;
     }
 
     setBusy(true);
     try {
-      // never let an order exceed the real inventory
       const short = await checkCartStock(lines.map((l) => ({ id: l.id, name: l.name, qty: l.qty })));
       if (short.length) {
         const first = short[0]!;
@@ -233,6 +134,20 @@ function CheckoutPage() {
         setBusy(false);
         return;
       }
+
+      // 1) خصم المبلغ من الرصيد أولاً
+      const pay = await chargeBalance(user.uid, total);
+      if (!pay.ok) {
+        toast.error(
+          lang === "ar"
+            ? `رصيدك غير كافٍ — ينقصك ${omr(pay.missing)}`
+            : `Not enough balance — ${omr(pay.missing)} short`,
+        );
+        setBusy(false);
+        navigate({ to: "/topup" });
+        return;
+      }
+
       const payload = {
         customerName: name,
         senderName: name,
@@ -254,36 +169,46 @@ function CheckoutPage() {
         currency: "OMR",
         deliveryMethod: "digital",
         deliveryFee: 0,
-        paymentMethod: method?.id || "bank",
-        paymentMethodName: method ? method.name : "",
-        paymentCurrency: method?.currency || "OMR",
-        paymentProof: cardMode ? "card" : "receipt",
-        cardNumber: cardMode ? codes.join(" | ") : "",
-        cardNumbers: cardMode ? codes : [],
+        paymentMethod: "wallet",
+        paymentMethodName: lang === "ar" ? "رصيد المحفظة" : "Wallet balance",
+        paymentCurrency: "OMR",
+        paymentProof: "wallet",
+        paidFromWallet: true,
+        paid: true,
         totalUsdt: Number(toUsdt(total).toFixed(2)),
         totalOoredoo: Number(toOoredoo(total).toFixed(2)),
-        amountToPay: amountRaw(method),
-        receiptImage: receipts[0] || "",
-        receiptImages: receipts,
-
-
+        amountToPay: total.toFixed(2),
         discountCode: codeId ? code : "",
         discountAmount: discount,
         status: "pending",
-        statusText: lang === "ar" ? "قيد المراجعة" : "Pending review",
+        statusText: lang === "ar" ? "مدفوع — جاري التسليم" : "Paid — delivering",
       };
-      const created = await createOrder(payload);
-      void notifyNewOrder(payload, formatOrderNo(created)).then((r) => {
-        if (!r.customer.ok && r.customer.error !== "غير مُفعّل")
-          console.warn("WhatsApp customer notice failed:", r.customer.error);
-        if (!r.admin.ok && r.admin.error !== "غير مُفعّل")
-          console.warn("WhatsApp admin notice failed:", r.admin.error);
-      });
-      if (codeId) await incrementDiscountUsage(codeId);
-      clear();
-      toast.success(t("orderPlaced"));
-      navigate({ to: "/orders" });
 
+      try {
+        const created = await createOrder(payload);
+        await logPurchase(user.uid, total, pay.balanceAfter, created);
+        void notifyWalletOrder({ ...payload, ...created } as never, formatOrderNo(created));
+        if (codeId) await incrementDiscountUsage(codeId);
+        clear();
+
+        // تسليم فوري: السيرفر يسحب الأكواد من المخزون ويرسلها للعميل
+        const delivery = await requestInstantDelivery(created.id);
+        if (delivery.ok)
+          toast.success(
+            lang === "ar"
+              ? "تم الدفع من رصيدك والتسليم فوراً ✅ — تجد التفاصيل في طلباتي"
+              : "Paid from your balance and delivered instantly ✅",
+          );
+        else {
+          toast.success(t("orderPlaced"));
+          toast.message(instantDeliveryHint(delivery, lang));
+        }
+        navigate({ to: "/orders" });
+      } catch (e) {
+        // فشل إنشاء الطلب بعد الخصم — نُرجع الرصيد فوراً
+        await refundBalance(user.uid, total, "استرجاع بعد فشل الطلب");
+        throw e;
+      }
     } catch {
       toast.error(lang === "ar" ? "تعذر إرسال الطلب" : "Could not place order");
     } finally {
@@ -297,9 +222,7 @@ function CheckoutPage() {
         <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-3">
           <button
             onClick={() =>
-              window.history.length > 1
-                ? router.history.back()
-                : router.navigate({ to: "/store" })
+              window.history.length > 1 ? router.history.back() : router.navigate({ to: "/store" })
             }
             className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-card/70 px-4 font-display text-sm hover:border-primary hover:text-primary"
           >
@@ -307,6 +230,15 @@ function CheckoutPage() {
             {lang === "ar" ? "رجوع" : "Back"}
           </button>
           <span className="font-display text-sm text-muted-foreground">{t("checkout")}</span>
+          {user && (
+            <Link
+              to="/wallet"
+              className="ms-auto inline-flex h-11 items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 font-tech text-sm text-primary"
+            >
+              <Wallet className="size-4" />
+              {fmt(balance)}
+            </Link>
+          )}
         </div>
       </div>
 
@@ -315,8 +247,8 @@ function CheckoutPage() {
           <h1 className="font-display text-3xl">💳 {t("checkout")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {lang === "ar"
-              ? "منتجات رقمية — التسليم يتم داخل الموقع في صفحة طلباتي بعد قبول الطلب"
-              : "Digital products — delivered inside the site on your Orders page"}
+              ? "الدفع يتم من رصيد محفظتك — والتسليم داخل الموقع في صفحة طلباتي"
+              : "Paid from your wallet balance — delivered inside the site"}
           </p>
         </div>
 
@@ -354,9 +286,7 @@ function CheckoutPage() {
                       <p className="line-clamp-1 text-sm">{l.name}</p>
                       <p className="font-tech text-xs text-muted-foreground">× {l.qty}</p>
                     </div>
-                    <span className="font-tech text-sm text-primary">
-                      {fmt(l.price * l.qty)}
-                    </span>
+                    <span className="font-tech text-sm text-primary">{fmt(l.price * l.qty)}</span>
                   </div>
                 ))}
               </div>
@@ -410,7 +340,10 @@ function CheckoutPage() {
                   <span className="mb-1 block text-xs text-muted-foreground">
                     {`${lang === "ar" ? "رقم للتواصل (واتساب)" : "Contact number (WhatsApp)"} *`}
                   </span>
-                  <div dir="ltr" className="grid w-full grid-cols-[6.5rem_minmax(0,1fr)] items-stretch gap-2">
+                  <div
+                    dir="ltr"
+                    className="grid w-full grid-cols-[6.5rem_minmax(0,1fr)] items-stretch gap-2"
+                  >
                     <select
                       value={cc}
                       onChange={(e) => setCc(e.target.value)}
@@ -432,12 +365,9 @@ function CheckoutPage() {
                       placeholder="9xxxxxxx"
                     />
                   </div>
-
-
                   <span className="mt-1 block text-[11px] text-muted-foreground" dir="ltr">
                     +{cc} {phone.replace(/\D/g, "").replace(/^0+/, "")}
                   </span>
-
                 </label>
               </div>
               <div className="mt-3">
@@ -451,299 +381,60 @@ function CheckoutPage() {
               </div>
             </Section>
 
-            {/* PAYMENT */}
+            {/* WALLET PAYMENT */}
             <Section
-              icon={<Banknote className="size-4" />}
-              title={lang === "ar" ? "طريقة الدفع" : "Payment method"}
+              icon={<Wallet className="size-4" />}
+              title={lang === "ar" ? "الدفع من الرصيد" : "Pay with balance"}
             >
-              <div className="space-y-4 rounded-2xl border border-border bg-background/40 p-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {methods.map((m) => {
-                    const active = m.id === methodId;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setMethodId(m.id)}
-                        className={`flex items-center gap-3 rounded-2xl border p-3 text-start transition-colors ${
-                          active
-                            ? "border-primary bg-primary/10"
-                            : "border-border bg-background/60 hover:border-primary/50"
-                        }`}
-                      >
-                        <img
-                          src={methodLogo(m)}
-                          alt={m.name}
-                          loading="lazy"
-                          className="size-9 shrink-0 rounded-xl object-contain"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold">
-                            {lang === "ar" ? m.name : m.nameEn || m.name}
-                          </span>
-                          <span className="block text-[11px] text-muted-foreground">
-                            {amountText(m)}
-                          </span>
-
-                        </span>
-                        {active && <Check className="ms-auto size-4 shrink-0 text-primary" />}
-                      </button>
-                    );
-                  })}
+              <div
+                className={`rounded-2xl border p-4 ${
+                  enough ? "border-primary/40 bg-primary/5" : "border-destructive/50 bg-destructive/5"
+                }`}
+              >
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    {lang === "ar" ? "رصيدك الحالي" : "Your balance"}
+                  </span>
+                  <span className="font-tech text-primary">{fmt(balance)}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    {lang === "ar" ? "قيمة الطلب" : "Order total"}
+                  </span>
+                  <span className="font-tech">{fmt(total)}</span>
                 </div>
 
-                {method && (
-                  <div className="space-y-2">
-                    {method.fields.map((f, i) => (
-                      <div
-                        key={`${f.label}-${i}`}
-                        className="flex items-center gap-3 rounded-xl border border-border bg-background/60 p-3"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[11px] text-muted-foreground">{f.label}</p>
-                          <p className="break-all font-tech text-sm text-primary">{f.value}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => copyLine(`${method.id}-${i}`, f.value)}
-                          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-accent px-3 text-xs text-accent"
-                        >
-                          {copiedKey === `${method.id}-${i}` ? (
-                            <Check className="size-3.5" />
-                          ) : (
-                            <Copy className="size-3.5" />
-                          )}
-                          {lang === "ar" ? "نسخ" : "Copy"}
-                        </button>
-                      </div>
-                    ))}
-
-                    <div className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[11px] text-muted-foreground">
-                          {lang === "ar" ? "المبلغ المطلوب تحويله" : "Amount to transfer"}
-                        </p>
-                        <p className="font-tech text-sm text-primary">{amountText(method)}</p>
-                        {method.currency === "OOREDOO" && (
-                          <p className="text-[11px] text-muted-foreground">
-                            {lang === "ar"
-                              ? `يعادل ${omr(total)} بنكياً — 750 بيسة بنك = 1 ريال أوريدو`
-                              : `Equals ${omr(total)} by bank — 750 bank baisa = 1 Ooredoo rial`}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copyLine("amount", amountRaw(method))}
-
-                        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-accent px-3 text-xs text-accent"
-                      >
-                        {copiedKey === "amount" ? (
-                          <Check className="size-3.5" />
-                        ) : (
-                          <Copy className="size-3.5" />
-                        )}
-                        {lang === "ar" ? "نسخ" : "Copy"}
-                      </button>
+                {enough ? (
+                  <p className="mt-3 flex items-center gap-2 text-sm text-emerald-400">
+                    <Check className="size-4" />
+                    {lang === "ar"
+                      ? "رصيدك يكفي — سيتم الخصم عند تأكيد الطلب"
+                      : "Balance is enough — it will be charged on confirm"}
+                  </p>
+                ) : (
+                  <>
+                    <div className="mt-3 flex items-center justify-between rounded-xl bg-destructive/10 p-3">
+                      <span className="text-sm text-destructive">
+                        {lang === "ar" ? "المبلغ الناقص" : "Missing amount"}
+                      </span>
+                      <span className="font-display text-lg text-destructive">{fmt(missing)}</span>
                     </div>
-
-                    {(lang === "ar" ? method.note : method.noteEn || method.note) && (
-                      <p className="text-xs text-muted-foreground">
-                        {lang === "ar" ? method.note : method.noteEn || method.note}
-                      </p>
-                    )}
-                  </div>
+                    <Link
+                      to="/topup"
+                      className="mt-3 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-destructive font-display text-destructive-foreground"
+                    >
+                      <Plus className="size-4" />
+                      {lang === "ar" ? "اذهب للشحن الآن" : "Go top up now"}
+                    </Link>
+                  </>
                 )}
-
-                {allowCard && (
-                  <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-background/60 p-1">
-                    {(["transfer", "card"] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setPayMode(mode)}
-                        className={`rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
-                          payMode === mode
-                            ? "bg-primary text-primary-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {mode === "transfer"
-                          ? lang === "ar"
-                            ? "تحويل رصيد + إيصال"
-                            : "Balance transfer + receipt"
-                          : lang === "ar"
-                            ? "إرسال بطاقة أوريدو"
-                            : "Send an Ooredoo card"}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <ol className="space-y-1 text-xs text-muted-foreground">
-                  {cardMode ? (
-                    <>
-                      <li>
-                        1.{" "}
-                        {lang === "ar"
-                          ? `اشترِ بطاقة أوريدو بقيمة ${amountText(method)} أو أكثر.`
-                          : `Buy an Ooredoo card worth ${amountText(method)} or more.`}
-                      </li>
-                      <li>
-                        2.{" "}
-                        {lang === "ar"
-                          ? "اكتب أكواد البطاقات هنا (حتى 10 أكواد)، أو ارفع صور رسائل البطاقات."
-                          : "Type the card codes here (up to 10), or upload the card message photos."}
-                      </li>
-
-                      <li>
-                        3. {lang === "ar" ? "أكّد الطلب." : "Confirm the order."}
-                      </li>
-                    </>
-                  ) : (
-                    <>
-                      <li>
-                        1.{" "}
-                        {lang === "ar"
-                          ? "انسخ بيانات الدفع وحوّل المبلغ الإجمالي."
-                          : "Copy the payment details and transfer the total."}
-                      </li>
-                      <li>
-                        2.{" "}
-                        {lang === "ar"
-                          ? "التقط صورة لإيصال التحويل."
-                          : "Take a screenshot of the receipt."}
-                      </li>
-                      <li>
-                        3.{" "}
-                        {lang === "ar"
-                          ? "ارفع الإيصال هنا ثم أكّد الطلب."
-                          : "Upload it here, then confirm the order."}
-                      </li>
-                    </>
-                  )}
-                </ol>
-
-                {method?.id === "bank" && bankImage && (
-                  <img
-                    src={bankImage}
-                    alt={lang === "ar" ? "بيانات الحساب البنكي" : "Bank account details"}
-                    className="w-full rounded-2xl border border-border object-contain"
-                  />
-                )}
-
-                {cardMode && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      {lang === "ar"
-                        ? "أكواد بطاقات أوريدو (يمكنك إضافة حتى 10 أكواد)"
-                        : "Ooredoo card codes (up to 10)"}
-                    </p>
-                    {cardNumbers.map((c, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <input
-                          className={inputCls}
-                          inputMode="numeric"
-                          dir="ltr"
-                          value={c}
-                          onChange={(e) =>
-                            setCardNumbers((prev) =>
-                              prev.map((v, k) => (k === i ? e.target.value : v)),
-                            )
-                          }
-                          placeholder={
-                            lang === "ar" ? `الكود رقم ${i + 1}` : `Card code #${i + 1}`
-                          }
-                        />
-                        {cardNumbers.length > 1 && (
-                          <button
-                            type="button"
-                            aria-label="remove"
-                            onClick={() =>
-                              setCardNumbers((prev) => prev.filter((_, k) => k !== i))
-                            }
-                            className="grid size-11 shrink-0 place-items-center rounded-xl border border-border text-muted-foreground hover:border-destructive hover:text-destructive"
-                          >
-                            <X className="size-4" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    {cardNumbers.length < 10 && (
-                      <button
-                        type="button"
-                        onClick={() => setCardNumbers((prev) => [...prev, ""])}
-                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-accent px-3 text-xs text-accent"
-                      >
-                        <Plus className="size-3.5" />
-                        {lang === "ar" ? "إضافة كود آخر" : "Add another code"}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {receipts.length > 0 && (
-                  <div className="grid grid-cols-3 gap-2">
-                    {receipts.map((r, i) => (
-                      <div key={r + i} className="relative">
-                        <img
-                          src={r}
-                          alt=""
-                          className="h-24 w-full rounded-xl border border-border object-cover"
-                        />
-                        <button
-                          type="button"
-                          aria-label="remove image"
-                          onClick={() => setReceipts((prev) => prev.filter((_, k) => k !== i))}
-                          className="absolute end-1 top-1 grid size-7 place-items-center rounded-lg bg-background/90 text-destructive"
-                        >
-                          <X className="size-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {receipts.length < 10 && (
-                  <label className="flex h-28 cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border text-center text-sm text-muted-foreground hover:border-primary hover:text-primary">
-                    {uploading ? (
-                      <Loader2 className="size-5 animate-spin" />
-                    ) : (
-                      <>
-                        <Upload className="size-5" />
-                        {cardMode
-                          ? lang === "ar"
-                            ? "ارفع صور رسائل البطاقات (يمكن أكثر من صورة)"
-                            : "Upload card message photos (multiple allowed)"
-                          : lang === "ar"
-                            ? "ارفع صورة الإيصال"
-                            : "Upload receipt"}
-                      </>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      hidden
-                      onChange={(e) => {
-                        const fs = Array.from(e.target.files || []);
-                        e.target.value = "";
-                        if (fs.length) void pickReceipts(fs);
-                      }}
-                    />
-                  </label>
-                )}
-
-
               </div>
             </Section>
 
             {/* TOTALS */}
             <div className="rounded-3xl glass-panel p-5 sm:p-6">
               <Row label={t("subtotal")} value={fmt(subtotal)} />
-              {discount > 0 && (
-                <Row label={t("discount")} value={`-${fmt(discount)}`} accent />
-              )}
+              {discount > 0 && <Row label={t("discount")} value={`-${fmt(discount)}`} accent />}
               <Row
                 label={lang === "ar" ? "التسليم" : "Delivery"}
                 value={lang === "ar" ? "رقمي داخل الموقع" : "Digital, in-site"}
@@ -765,16 +456,22 @@ function CheckoutPage() {
               <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                 <Zap className="size-3.5 text-accent" />
                 {lang === "ar"
-                  ? "بعد قبول الطلب تظهر أكواد منتجاتك مباشرة في صفحة طلباتي."
-                  : "Once accepted, your codes appear on the Orders page."}
+                  ? "يُخصم المبلغ من رصيدك مباشرة وتظهر أكواد منتجاتك في صفحة طلباتي."
+                  : "The amount is charged instantly and your codes appear on the Orders page."}
               </p>
 
               <button
                 disabled={busy}
-                onClick={submit}
+                onClick={() => void submit()}
                 className="mt-5 hidden h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground disabled:opacity-60 sm:block"
               >
-                {busy ? "..." : t("placeOrder")}
+                {busy
+                  ? "..."
+                  : enough
+                    ? t("placeOrder")
+                    : lang === "ar"
+                      ? "اشحن رصيدك أولاً"
+                      : "Top up first"}
               </button>
             </div>
           </div>
@@ -785,7 +482,7 @@ function CheckoutPage() {
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 p-3 backdrop-blur-xl sm:hidden">
           <button
             disabled={busy}
-            onClick={submit}
+            onClick={() => void submit()}
             className="h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground disabled:opacity-60"
           >
             {busy ? "..." : `${t("placeOrder")} · ${fmt(total)}`}
