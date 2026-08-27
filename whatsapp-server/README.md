@@ -8,7 +8,7 @@
 > `Cannot find module '/app/deliver.js'` نهائياً.
 
 ## الرفع على Railway
-1. ارفع محتويات مجلد `whatsapp-server` (3 ملفات: `index.js`, `package.json`, `README.md`) لمستودع GitHub ثم Railway › Deploy from GitHub.
+1. حمّل ZIP من لوحة التحكم (يحتوي: `index.js`, `package.json`, `README.md`, `railway.json`, `Procfile`, `.gitignore`) وارفع الملفات **في جذر المستودع** على GitHub ثم Railway › Deploy from GitHub.
 2. Variables:
    - `TOKEN` = كلمة سر تخترعها (نفسها تُدخل في لوحة تحكم الموقع).
    - `ADMIN_NUMBER` = رقمك بصيغة دولية بدون + مثال `9689xxxxxxx`
