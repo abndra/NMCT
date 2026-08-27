@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { Layout } from "@/components/site/Layout";
+import { DeliveryCeremony } from "@/components/site/DeliveryCeremony";
 import { useCart } from "@/lib/cart";
 import { useAuth, GoogleMark } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -71,6 +72,7 @@ function CheckoutPage() {
   const [discount, setDiscount] = useState(0);
   const [codeId, setCodeId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [ceremony, setCeremony] = useState<null | "working" | "done" | "queued">(null);
 
   useEffect(() => {
     const saved = String(settings["countryCode"] || "").replace(/\D/g, "");
@@ -191,8 +193,15 @@ function CheckoutPage() {
         if (codeId) await incrementDiscountUsage(codeId);
         clear();
 
-        // تسليم فوري: السيرفر يسحب الأكواد من المخزون ويرسلها للعميل
+        // أنيميشن التسليم الفوري — 3 ثوانٍ كاملة بينما السيرفر يسلّم فعلياً
+        setCeremony("working");
+        const minShow = new Promise((r) => setTimeout(r, 3000));
+        // تسليم فوري: السيرفر يسحب الأكواد من المخزون ويرسلها للعميل ويقفل الطلب كـ«تم التسليم»
         const delivery = await requestInstantDelivery(created.id);
+        await minShow;
+        setCeremony(delivery.ok ? "done" : "queued");
+        await new Promise((r) => setTimeout(r, 900));
+
         if (delivery.ok)
           toast.success(
             lang === "ar"
@@ -203,8 +212,10 @@ function CheckoutPage() {
           toast.success(t("orderPlaced"));
           toast.message(instantDeliveryHint(delivery, lang));
         }
+        setCeremony(null);
         navigate({ to: "/orders" });
       } catch (e) {
+        setCeremony(null);
         // فشل إنشاء الطلب بعد الخصم — نُرجع الرصيد فوراً
         await refundBalance(user.uid, total, "استرجاع بعد فشل الطلب");
         throw e;
@@ -218,6 +229,7 @@ function CheckoutPage() {
 
   return (
     <Layout>
+      {ceremony && <DeliveryCeremony state={ceremony} />}
       <div className="sticky top-[4.5rem] z-30 border-b border-border/60 bg-background/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-3">
           <button

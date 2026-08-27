@@ -1750,8 +1750,8 @@ function SettingsTab() {
                     ? " — التسليم الفوري مُفعّل ⚡"
                     : " — instant delivery ON ⚡"
                   : lang === "ar"
-                    ? " — التسليم الفوري غير مُفعّل (أضف FIREBASE_SERVICE_ACCOUNT للسيرفر)"
-                    : " — instant delivery OFF (set FIREBASE_SERVICE_ACCOUNT)";
+                    ? " — التسليم الفوري غير مُفعّل (أضف FIREBASE_DB_SECRET في متغيرات Railway)"
+                    : " — instant delivery OFF (set FIREBASE_DB_SECRET on Railway)";
                 setWaState(
                   (st.connected
                     ? lang === "ar"
@@ -1832,7 +1832,7 @@ function SettingsTab() {
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {lang === "ar"
-              ? "حمّل الملفات كملف ZIP ثم ارفعها لمستودع GitHub وانشرها على Railway."
+              ? "حمّل الملفات كملف ZIP (index.js, package.json, README.md, railway.json, Procfile, .gitignore) ثم ارفعها كما هي لمستودع GitHub وانشرها على Railway."
               : "Download the files as a ZIP, push them to a GitHub repo, then deploy on Railway."}
           </p>
           <button

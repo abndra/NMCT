@@ -153,6 +153,10 @@ export type Order = {
   manualDelivery?: boolean;
   manualDeliveryText?: string;
   deliveredAt?: number;
+  /** Paid from the wallet balance — delivered automatically, needs no admin approval. */
+  paidFromWallet?: boolean;
+  /** Set by the WhatsApp server when it delivered the order instantly. */
+  autoDelivered?: boolean;
 
   updatedAt?: number;
   createdAt: number;

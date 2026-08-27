@@ -1,4 +1,17 @@
-/* Tiny store-only (no compression) ZIP writer — used to download the WhatsApp server files. */
+/* Tiny store-only (no compression) ZIP writer — used to download the WhatsApp server files.
+ *
+ * IMPORTANT: file contents are embedded at build time with Vite `?raw` imports,
+ * so the downloaded ZIP always contains the real source code (previously it
+ * fetched /whatsapp-server/* at runtime and received the SPA index.html
+ * fallback, producing a broken/empty archive).
+ */
+
+import waIndexJs from "../../whatsapp-server/index.js?raw";
+import waPackageJson from "../../whatsapp-server/package.json?raw";
+import waReadme from "../../whatsapp-server/README.md?raw";
+import waRailwayJson from "../../whatsapp-server/railway.json?raw";
+import waProcfile from "../../whatsapp-server/Procfile?raw";
+import waGitignore from "../../whatsapp-server/gitignore.txt?raw";
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -42,7 +55,7 @@ export function makeZip(files: { name: string; content: string }[]): Blob {
     const local = join([
       u32(0x04034b50),
       u16(20),
-      u16(0),
+      u16(0x0800), // UTF-8 filenames
       u16(0),
       u16(0),
       u16(0),
@@ -60,7 +73,7 @@ export function makeZip(files: { name: string; content: string }[]): Blob {
         u32(0x02014b50),
         u16(20),
         u16(20),
-        u16(0),
+        u16(0x0800),
         u16(0),
         u16(0),
         u16(0),
@@ -105,16 +118,21 @@ export function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-const WA_FILES = ["index.js", "package.json", "README.md"];
+/** الملفات الحقيقية للسيرفر — مضمّنة في البناء (لا تعتمد على أي طلب شبكة). */
+export function whatsappServerFiles(): { name: string; content: string }[] {
+  return [
+    { name: "index.js", content: waIndexJs },
+    { name: "package.json", content: waPackageJson },
+    { name: "README.md", content: waReadme },
+    { name: "railway.json", content: waRailwayJson },
+    { name: "Procfile", content: waProcfile },
+    { name: ".gitignore", content: waGitignore },
+  ].filter((f) => f.content && f.content.trim().length > 0);
+}
 
 /** Downloads whatsapp-server/* as one ZIP ready to push to GitHub. */
 export async function downloadWhatsappServerZip() {
-  const files = await Promise.all(
-    WA_FILES.map(async (name) => {
-      const res = await fetch(`/whatsapp-server/${name}`);
-      if (!res.ok) throw new Error(name);
-      return { name, content: await res.text() };
-    }),
-  );
+  const files = whatsappServerFiles();
+  if (files.length < 3 || !files[0]!.content.includes("express")) throw new Error("server-files-missing");
   downloadBlob(makeZip(files), "whatsapp-server.zip");
 }

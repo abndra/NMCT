@@ -260,3 +260,21 @@
 @utility animate-pulse-glow {
   animation: gp-pulse-glow 2.4s ease-out infinite;
 }
+
+/* ---- أنيميشن التسليم الفوري (طلبات الدفع بالرصيد) ---- */
+@keyframes delivery-ring {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@keyframes delivery-bolt {
+  0%, 100% { transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 transparent); }
+  50% { transform: scale(1.18) rotate(-6deg); filter: drop-shadow(0 0 18px var(--color-primary)); }
+}
+@keyframes delivery-pop {
+  0% { transform: scale(0.86); opacity: 0; }
+  60% { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.delivery-ring { animation: delivery-ring 1.6s ease-out infinite; }
+.delivery-bolt { animation: delivery-bolt 1.1s ease-in-out infinite; }
+.delivery-pop { animation: delivery-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }

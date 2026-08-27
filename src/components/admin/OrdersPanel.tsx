@@ -524,6 +524,23 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
 
       <div className={card}>
         <p className="font-display text-sm">{lang === "ar" ? "إدارة الحالة" : "Manage status"}</p>
+        {o.paidFromWallet && (
+          <p
+            className={`rounded-xl border p-3 text-xs ${
+              o.status === "delivered" || (o.deliveredCodes || []).length
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-accent/40 bg-accent/10 text-accent"
+            }`}
+          >
+            {o.status === "delivered" || (o.deliveredCodes || []).length
+              ? lang === "ar"
+                ? "⚡ مدفوع من الرصيد — تم التسليم تلقائياً بدون أي موافقة منك."
+                : "⚡ Paid from balance — delivered automatically, no approval needed."
+              : lang === "ar"
+                ? "⚡ مدفوع من الرصيد — لا يحتاج موافقة. لم يكتمل التسليم التلقائي (نقص مخزون أو سيرفر الواتساب غير مضبوط) — أكمله من «تسليم من المخزون»."
+                : "⚡ Paid from balance — no approval needed. Auto delivery did not complete (out of stock or WhatsApp server not configured) — finish it with “Deliver from stock”."}
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           {ORDER_STATUSES.map((s) => (
             <button
