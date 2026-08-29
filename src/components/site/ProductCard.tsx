@@ -65,6 +65,11 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
               </span>
             </span>
           )}
+          {product.accountProduct && (
+            <span className="absolute bottom-3 rounded-full border border-accent/50 bg-background/80 px-2.5 py-1 font-tech text-[10px] text-accent ltr:left-3 rtl:right-3">
+              {lang === "ar" ? "حسابات — يحتاج موافقة" : "Accounts — needs approval"}
+            </span>
+          )}
           {off > 0 && (
             <span className="absolute top-3 rounded-full bg-destructive px-2.5 py-1 font-tech text-xs font-bold text-destructive-foreground ltr:right-3 rtl:left-3">
               -{off}%

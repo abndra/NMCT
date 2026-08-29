@@ -799,6 +799,7 @@ type ProductDraft = {
   stock: string;
   lowStockAt: string;
   digital: boolean;
+  accountProduct: boolean;
   codes: string;
   
   deliveryText: string;
@@ -819,6 +820,7 @@ const emptyDraft: ProductDraft = {
   stock: "",
   lowStockAt: "",
   digital: false,
+  accountProduct: false,
   codes: "",
   
   deliveryText: "",
@@ -862,6 +864,7 @@ function ProductsTab() {
             stock: p.stock === undefined || p.stock === null ? "" : String(p.stock),
             lowStockAt: p.lowStockAt ? String(p.lowStockAt) : "",
             digital: p.digital === true,
+            accountProduct: p.accountProduct === true,
             codes: (p.codes || []).join("\n"),
             
             deliveryText: p.deliveryText || "",
@@ -890,6 +893,7 @@ function ProductsTab() {
       sections: draft.sections,
       lowStockAt: draft.lowStockAt === "" ? 5 : Number(draft.lowStockAt),
       digital: draft.digital,
+      accountProduct: draft.accountProduct,
       
       deliveryText: draft.deliveryText,
       // codes are NEVER stored on the public product node anymore
@@ -1181,6 +1185,29 @@ function ProductsTab() {
                   : "On acceptance a unit is assigned to the buyer and shown on their Orders page."}
               </p>
             )}
+
+            <label className="flex items-center gap-3 rounded-xl border border-accent/40 bg-accent/5 p-3">
+              <input
+                type="checkbox"
+                className="size-4 accent-[var(--color-primary)]"
+                checked={draft.accountProduct}
+                onChange={(e) => setDraft({ ...draft, accountProduct: e.target.checked })}
+              />
+              <span className="text-sm">
+                {lang === "ar"
+                  ? "حسابات (يحتاج موافقتك دائماً + تسليم نص يدوي)"
+                  : "Accounts (always needs your approval + manual text delivery)"}
+              </span>
+            </label>
+            {draft.accountProduct && (
+              <p className="text-xs text-accent">
+                {lang === "ar"
+                  ? "أي طلب يحتوي هذا المنتج ينتظر موافقتك — حتى لو دفع الزبون من رصيد المحفظة — وتسلّمه أنت نصاً من لوحة الطلبات."
+                  : "Any order containing this product waits for your approval — even when paid from the wallet — and you deliver the text yourself."}
+              </p>
+            )}
+
+
 
             {!draft.digital && (
               <Labeled

@@ -20,6 +20,7 @@ import { useI18n } from "@/lib/i18n";
 import { useCurrency, toUsdt, toOoredoo, OMR_TO_USDT } from "@/lib/currency";
 import {
   createOrder,
+  notifyNewOrder,
   validateDiscountCode,
   incrementDiscountUsage,
   DEFAULT_COUNTRY_CODE,
@@ -32,7 +33,14 @@ import { requestInstantDelivery, instantDeliveryHint } from "@/lib/delivery";
 import { useBalance } from "@/hooks/use-wallet";
 
 import { DIAL_CODES } from "@/lib/country-codes";
-import { useSettings } from "@/hooks/use-store-data";
+import { useSettings, useProducts } from "@/hooks/use-store-data";
+import {
+  PaymentPicker,
+  emptyPaymentState,
+  payAmountRaw,
+  type PaymentState,
+} from "@/components/site/PaymentPicker";
+import { readPaymentMethods } from "@/lib/db";
 
 export const Route = createFileRoute("/checkout")({
   head: () => ({
@@ -73,6 +81,9 @@ function CheckoutPage() {
   const [codeId, setCodeId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ceremony, setCeremony] = useState<null | "working" | "done" | "queued">(null);
+  const [payMode, setPayMode] = useState<"wallet" | "direct">("wallet");
+  const [pay, setPay] = useState<PaymentState>(emptyPaymentState);
+  const { products } = useProducts();
 
   useEffect(() => {
     const saved = String(settings["countryCode"] || "").replace(/\D/g, "");
@@ -84,6 +95,13 @@ function CheckoutPage() {
   }, [user, name]);
 
   const total = Math.max(0, subtotal - discount);
+  const methods = readPaymentMethods(settings);
+  const method = methods.find((m) => m.id === pay.methodId) || methods[0];
+  const cardMode = (method?.allowCard === true || method?.currency === "OOREDOO") && pay.payMode === "card";
+  const direct = payMode === "direct";
+  /** منتجات «حسابات»: تحتاج موافقة الأدمن دائماً وتسليم نص يدوي. */
+  const accountLines = lines.filter((l) => products.some((p) => p.id === l.id && p.accountProduct));
+  const hasAccounts = accountLines.length > 0;
   const missing = Math.max(0, Number((total - balance).toFixed(3)));
   const enough = missing <= 0;
   const BackIcon = dir === "rtl" ? ArrowRight : ArrowLeft;
@@ -115,7 +133,15 @@ function CheckoutPage() {
       toast.error(lang === "ar" ? "أدخل رقم هاتف صحيح" : "Enter a valid phone number");
       return;
     }
-    if (!enough) {
+    if (direct) {
+      const codes = pay.cardNumbers.map((c) => c.trim()).filter((c) => c.length >= 4);
+      if (cardMode ? !pay.receipts.length && !codes.length : !pay.receipts.length) {
+        toast.error(
+          lang === "ar" ? "أرفق صورة إثبات الدفع" : "Attach a payment proof image",
+        );
+        return;
+      }
+    } else if (!enough) {
       toast.error(
         lang === "ar" ? `رصيدك غير كافٍ — تحتاج ${omr(missing)}` : `Not enough balance — ${omr(missing)} more`,
       );
@@ -137,20 +163,15 @@ function CheckoutPage() {
         return;
       }
 
-      // 1) خصم المبلغ من الرصيد أولاً
-      const pay = await chargeBalance(user.uid, total);
-      if (!pay.ok) {
-        toast.error(
-          lang === "ar"
-            ? `رصيدك غير كافٍ — ينقصك ${omr(pay.missing)}`
-            : `Not enough balance — ${omr(pay.missing)} short`,
-        );
-        setBusy(false);
-        navigate({ to: "/topup" });
-        return;
-      }
-
-      const payload = {
+      const baseItems = lines.map((l) => ({
+        id: l.id,
+        name: l.name,
+        price: l.price,
+        qty: l.qty,
+        image: l.image || "",
+        size: l.size || "",
+      }));
+      const baseInfo = {
         customerName: name,
         senderName: name,
         phone: waNumber(phone, cc),
@@ -158,45 +179,107 @@ function CheckoutPage() {
         note,
         uid: user.uid,
         username: user.displayName || name,
-        items: lines.map((l) => ({
-          id: l.id,
-          name: l.name,
-          price: l.price,
-          qty: l.qty,
-          image: l.image || "",
-          size: l.size || "",
-        })),
+        items: baseItems,
         subtotal,
         total,
         currency: "OMR",
         deliveryMethod: "digital",
         deliveryFee: 0,
+        totalUsdt: Number(toUsdt(total).toFixed(2)),
+        totalOoredoo: Number(toOoredoo(total).toFixed(2)),
+        discountCode: codeId ? code : "",
+        discountAmount: discount,
+        accountOrder: hasAccounts,
+        status: "pending",
+      };
+
+      /* ---------- (أ) دفع مباشر بدون محفظة: ينتظر موافقة الأدمن ---------- */
+      if (direct) {
+        const codes = pay.cardNumbers.map((c) => c.trim()).filter((c) => c.length >= 4);
+        const payload = {
+          ...baseInfo,
+          paymentMethod: method?.id || "bank",
+          paymentMethodName: method ? (lang === "ar" ? method.name : method.nameEn || method.name) : "",
+          paymentCurrency: method?.currency || "OMR",
+          amountToPay: payAmountRaw(method, total, cardMode),
+          receiptImage: pay.receipts[0] || "",
+          receiptImages: pay.receipts,
+          cardNumbers: cardMode ? codes : [],
+          paymentProof: pay.receipts[0] || (codes[0] || ""),
+          paidFromWallet: false,
+          paid: false,
+          needsApproval: true,
+          statusText:
+            lang === "ar" ? "بانتظار مراجعة الدفع والموافقة" : "Awaiting payment review",
+        };
+        const created = await createOrder(payload);
+        void notifyNewOrder({ ...payload, ...created } as never, formatOrderNo(created));
+        if (codeId) await incrementDiscountUsage(codeId);
+        clear();
+        toast.success(t("orderPlaced"));
+        toast.message(
+          lang === "ar"
+            ? "تم إرسال طلبك — سيتم تسليمه بعد مراجعة الدفع والموافقة عليه."
+            : "Order sent — it will be delivered after payment review.",
+        );
+        navigate({ to: "/orders" });
+        return;
+      }
+
+      /* ---------- (ب) دفع من المحفظة ---------- */
+      const payres = await chargeBalance(user.uid, total);
+      if (!payres.ok) {
+        toast.error(
+          lang === "ar"
+            ? `رصيدك غير كافٍ — ينقصك ${omr(payres.missing)}`
+            : `Not enough balance — ${omr(payres.missing)} short`,
+        );
+        setBusy(false);
+        navigate({ to: "/topup" });
+        return;
+      }
+
+      const payload = {
+        ...baseInfo,
         paymentMethod: "wallet",
         paymentMethodName: lang === "ar" ? "رصيد المحفظة" : "Wallet balance",
         paymentCurrency: "OMR",
         paymentProof: "wallet",
         paidFromWallet: true,
         paid: true,
-        totalUsdt: Number(toUsdt(total).toFixed(2)),
-        totalOoredoo: Number(toOoredoo(total).toFixed(2)),
         amountToPay: total.toFixed(2),
-        discountCode: codeId ? code : "",
-        discountAmount: discount,
-        status: "pending",
-        statusText: lang === "ar" ? "مدفوع — جاري التسليم" : "Paid — delivering",
+        needsApproval: hasAccounts,
+        statusText: hasAccounts
+          ? lang === "ar"
+            ? "مدفوع — بانتظار تجهيز الحساب"
+            : "Paid — account being prepared"
+          : lang === "ar"
+            ? "مدفوع — جاري التسليم"
+            : "Paid — delivering",
       };
 
       try {
         const created = await createOrder(payload);
-        await logPurchase(user.uid, total, pay.balanceAfter, created);
+        await logPurchase(user.uid, total, payres.balanceAfter, created);
         void notifyWalletOrder({ ...payload, ...created } as never, formatOrderNo(created));
         if (codeId) await incrementDiscountUsage(codeId);
         clear();
 
+        // منتجات «حسابات»: لا تسليم فوري — تنتظر موافقة الأدمن ثم يسلّمها نصاً
+        if (hasAccounts) {
+          toast.success(t("orderPlaced"));
+          toast.message(
+            lang === "ar"
+              ? "تم الدفع من رصيدك ✅ — منتجات الحسابات تُجهَّز يدوياً وتصلك بعد الموافقة."
+              : "Paid from your balance ✅ — account products are prepared manually.",
+          );
+          navigate({ to: "/orders" });
+          return;
+        }
+
         // أنيميشن التسليم الفوري — 3 ثوانٍ كاملة بينما السيرفر يسلّم فعلياً
         setCeremony("working");
         const minShow = new Promise((r) => setTimeout(r, 3000));
-        // تسليم فوري: السيرفر يسحب الأكواد من المخزون ويرسلها للعميل ويقفل الطلب كـ«تم التسليم»
         const delivery = await requestInstantDelivery(created.id);
         await minShow;
         setCeremony(delivery.ok ? "done" : "queued");
@@ -259,8 +342,8 @@ function CheckoutPage() {
           <h1 className="font-display text-3xl">💳 {t("checkout")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {lang === "ar"
-              ? "الدفع يتم من رصيد محفظتك — والتسليم داخل الموقع في صفحة طلباتي"
-              : "Paid from your wallet balance — delivered inside the site"}
+              ? "ادفع من رصيد محفظتك للتسليم الفوري، أو ادفع مباشرة وينتظر طلبك موافقتنا"
+              : "Pay from your wallet for instant delivery, or pay directly and wait for approval"}
           </p>
         </div>
 
@@ -393,11 +476,53 @@ function CheckoutPage() {
               </div>
             </Section>
 
-            {/* WALLET PAYMENT */}
+            {/* PAYMENT MODE */}
             <Section
               icon={<Wallet className="size-4" />}
-              title={lang === "ar" ? "الدفع من الرصيد" : "Pay with balance"}
+              title={lang === "ar" ? "طريقة الدفع" : "Payment method"}
             >
+              <div className="mb-4 grid grid-cols-2 gap-2 rounded-2xl border border-border bg-background/60 p-1">
+                {(["wallet", "direct"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setPayMode(m)}
+                    className={`rounded-xl px-3 py-2.5 text-xs font-semibold transition-colors ${
+                      payMode === m
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m === "wallet"
+                      ? lang === "ar"
+                        ? "من رصيد المحفظة (تسليم فوري)"
+                        : "Wallet balance (instant)"
+                      : lang === "ar"
+                        ? "دفع مباشر (بانتظار الموافقة)"
+                        : "Direct payment (needs approval)"}
+                  </button>
+                ))}
+              </div>
+
+              {hasAccounts && (
+                <p className="mb-3 rounded-xl border border-accent/40 bg-accent/10 p-3 text-xs text-accent">
+                  {lang === "ar"
+                    ? "طلبك يحتوي منتجات «حسابات» — تُجهَّز يدوياً وتصلك بعد موافقتنا، حتى عند الدفع من الرصيد."
+                    : "Your order contains account products — prepared manually and delivered after approval."}
+                </p>
+              )}
+
+              {direct ? (
+                <>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    {lang === "ar"
+                      ? "حوّل المبلغ بإحدى الطرق التالية وأرفق صورة الإثبات — يُسلَّم الطلب بعد مراجعة الدفع والموافقة عليه."
+                      : "Transfer the amount and attach the proof — delivered after review and approval."}
+                  </p>
+                  <PaymentPicker total={total} state={pay} setState={setPay} />
+                </>
+              ) : (
+
               <div
                 className={`rounded-2xl border p-4 ${
                   enough ? "border-primary/40 bg-primary/5" : "border-destructive/50 bg-destructive/5"
@@ -441,7 +566,9 @@ function CheckoutPage() {
                   </>
                 )}
               </div>
+              )}
             </Section>
+
 
             {/* TOTALS */}
             <div className="rounded-3xl glass-panel p-5 sm:p-6">
@@ -467,9 +594,17 @@ function CheckoutPage() {
               </p>
               <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                 <Zap className="size-3.5 text-accent" />
-                {lang === "ar"
-                  ? "يُخصم المبلغ من رصيدك مباشرة وتظهر أكواد منتجاتك في صفحة طلباتي."
-                  : "The amount is charged instantly and your codes appear on the Orders page."}
+                {direct
+                  ? lang === "ar"
+                    ? "الدفع المباشر ينتظر مراجعتنا للإيصال ثم يصلك المنتج في صفحة طلباتي وعلى واتساب."
+                    : "Direct payments are reviewed first, then delivered to your Orders page and WhatsApp."
+                  : hasAccounts
+                    ? lang === "ar"
+                      ? "يُخصم المبلغ من رصيدك الآن، ومنتجات الحسابات تصلك بعد تجهيزها والموافقة عليها."
+                      : "Charged now; account products arrive after they are prepared and approved."
+                    : lang === "ar"
+                      ? "يُخصم المبلغ من رصيدك مباشرة وتظهر أكواد منتجاتك في صفحة طلباتي فوراً."
+                      : "The amount is charged instantly and your codes appear on the Orders page."}
               </p>
 
               <button
@@ -479,12 +614,13 @@ function CheckoutPage() {
               >
                 {busy
                   ? "..."
-                  : enough
+                  : direct || enough
                     ? t("placeOrder")
                     : lang === "ar"
-                      ? "اشحن رصيدك أولاً"
-                      : "Top up first"}
+                      ? "اشحن رصيدك أو ادفع مباشرة"
+                      : "Top up or pay directly"}
               </button>
+
             </div>
           </div>
         )}

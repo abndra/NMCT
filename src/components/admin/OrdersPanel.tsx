@@ -524,7 +524,22 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
 
       <div className={card}>
         <p className="font-display text-sm">{lang === "ar" ? "إدارة الحالة" : "Manage status"}</p>
-        {o.paidFromWallet && (
+        {o.needsApproval && (
+          <p className="rounded-xl border border-accent/40 bg-accent/10 p-3 text-xs text-accent">
+            {o.accountOrder
+              ? lang === "ar"
+                ? "🧾 طلب «حسابات» — يحتاج موافقتك دائماً. جهّز الحساب ثم سلّمه نصاً من «تسليم يدوي»."
+                : "🧾 Accounts order — always needs your approval. Prepare it, then deliver the text manually."
+              : o.paidFromWallet
+                ? lang === "ar"
+                  ? "🧾 مدفوع من الرصيد لكنه يحتاج موافقتك قبل التسليم."
+                  : "🧾 Paid from balance but needs your approval before delivery."
+                : lang === "ar"
+                  ? "🧾 دفع مباشر (بدون محفظة) — راجع صورة الإثبات ثم اقبل الطلب وسلّمه."
+                  : "🧾 Direct payment (no wallet) — check the proof, then approve and deliver."}
+          </p>
+        )}
+        {o.paidFromWallet && !o.needsApproval && (
           <p
             className={`rounded-xl border p-3 text-xs ${
               o.status === "delivered" || (o.deliveredCodes || []).length

@@ -48,6 +48,9 @@ export type Product = {
   stock?: number;
   /** Digital product: delivered automatically over WhatsApp once accepted. */
   digital?: boolean;
+  /** "حسابات": always needs admin approval + manual text delivery, even when paid from the wallet. */
+  accountProduct?: boolean;
+
   /** Pool of unused codes for digital products (one per unit). */
   codes?: string[];
   /** "ستوك": unit-by-unit inventory where each unit is a code, an image or a text. */
@@ -157,6 +160,11 @@ export type Order = {
   paidFromWallet?: boolean;
   /** Set by the WhatsApp server when it delivered the order instantly. */
   autoDelivered?: boolean;
+  /** True when the order must wait for admin approval (direct payment or "حسابات" product). */
+  needsApproval?: boolean;
+  /** True when the order contains at least one "حسابات" product. */
+  accountOrder?: boolean;
+
 
   updatedAt?: number;
   createdAt: number;
