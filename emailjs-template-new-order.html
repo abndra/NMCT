@@ -1,0 +1,91 @@
+<!-- ============================================================
+  قالب EmailJS — إشعار «طلب جديد» للأدمن
+  ------------------------------------------------------------
+  Template ID : nmct_new_order
+  Subject     : 🎉 طلب جديد #{{order_number}} — {{total_price}}
+  To Email    : اكتب إيميلك هنا (هذا هو المستلم — الكود لا يتحكم به)
+  From Name   : {{from_name}}
+  Reply To    : {{reply_to}}
+  الطريقة: EmailJS ▸ Email Templates ▸ nmct_new_order ▸ Content ▸ Code Editor
+  ثم الصق كل ما تحت هذا التعليق.
+============================================================ -->
+<div dir="rtl" style="margin:0;padding:24px 12px;background:#0b1020;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:22px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.45);">
+
+    <tr>
+      <td style="background:linear-gradient(135deg,#0a2540 0%,#1d4ed8 55%,#22d3ee 100%);padding:30px 26px;text-align:center;">
+        <img src="{{store_logo}}" alt="{{store_name}}" width="84" height="84"
+             style="display:block;margin:0 auto 14px;width:84px;height:84px;border-radius:50%;background:#fff;padding:6px;border:2px solid rgba(255,255,255,.55);object-fit:contain;">
+        <div style="color:#ffffff;font-size:23px;font-weight:800;letter-spacing:.4px;">{{store_name}}</div>
+        <div style="display:inline-block;margin-top:12px;padding:8px 20px;border-radius:999px;background:rgba(255,255,255,.18);color:#e0f2fe;font-size:15px;font-weight:700;">
+          {{status_title}}
+        </div>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;border-bottom:1px solid #e2e8f0;">
+          <tr>
+            <td style="padding:14px 20px;text-align:center;color:#0a2540;font-size:14px;font-weight:700;">رقم الطلب<br><span style="font-size:17px;color:#1d4ed8;">#{{order_number}}</span></td>
+            <td style="padding:14px 20px;text-align:center;color:#0a2540;font-size:14px;font-weight:700;border-right:1px solid #e2e8f0;">التاريخ<br><span style="font-size:13px;font-weight:600;color:#64748b;">{{order_date}}</span></td>
+            <td style="padding:14px 20px;text-align:center;color:#0a2540;font-size:14px;font-weight:700;border-right:1px solid #e2e8f0;">عدد القطع<br><span style="font-size:17px;color:#1d4ed8;">{{items_count}}</span></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:24px 26px 6px;">
+        <div style="font-size:16px;font-weight:800;color:#0a2540;margin-bottom:12px;">👤 بيانات العميل</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e6eaf0;border-radius:14px;overflow:hidden;font-size:14px;color:#243244;">
+          <tr style="background:#f8fafc;"><td style="padding:11px 14px;font-weight:700;width:38%;">الاسم</td><td style="padding:11px 14px;">{{customer_name}}</td></tr>
+          <tr><td style="padding:11px 14px;font-weight:700;">الهاتف</td><td style="padding:11px 14px;" dir="ltr">{{sender_phone}}</td></tr>
+          <tr style="background:#f8fafc;"><td style="padding:11px 14px;font-weight:700;">الإيميل</td><td style="padding:11px 14px;" dir="ltr">{{customer_email}}</td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:20px 26px 6px;">
+        <div style="font-size:16px;font-weight:800;color:#0a2540;margin-bottom:12px;">🛍️ المنتجات</div>
+        <div style="white-space:pre-line;background:#f8fafc;border:1px solid #e6eaf0;border-radius:14px;padding:16px;font-size:14px;line-height:2;color:#243244;">{{products_list}}</div>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:20px 26px 6px;">
+        <div style="font-size:16px;font-weight:800;color:#0a2540;margin-bottom:12px;">🧾 الحساب</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e6eaf0;border-radius:14px;overflow:hidden;font-size:14px;color:#243244;">
+          <tr style="background:#f8fafc;"><td style="padding:11px 14px;font-weight:700;width:38%;">المجموع الفرعي</td><td style="padding:11px 14px;">{{subtotal_price}}</td></tr>
+          <tr><td style="padding:11px 14px;font-weight:700;">الخصم</td><td style="padding:11px 14px;">{{discount_line}}</td></tr>
+          <tr style="background:#f8fafc;"><td style="padding:11px 14px;font-weight:700;">التسليم</td><td style="padding:11px 14px;">{{delivery_line}}</td></tr>
+          <tr><td style="padding:11px 14px;font-weight:700;">طريقة الدفع</td><td style="padding:11px 14px;">{{payment_method}}</td></tr>
+          <tr style="background:#f8fafc;"><td style="padding:11px 14px;font-weight:700;">المبلغ المحوَّل</td><td style="padding:11px 14px;" dir="ltr">{{amount_to_pay}}</td></tr>
+          <tr><td style="padding:11px 14px;font-weight:700;">أكواد البطاقات</td><td style="padding:11px 14px;" dir="ltr">{{card_numbers}}</td></tr>
+          <tr style="background:#eff6ff;"><td style="padding:13px 14px;font-weight:800;color:#0a2540;">الإجمالي</td><td style="padding:13px 14px;font-weight:800;color:#1d4ed8;font-size:17px;">{{total_price}}</td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:20px 26px 6px;">
+        <div style="font-size:16px;font-weight:800;color:#0a2540;margin-bottom:10px;">🗒️ ملاحظات</div>
+        <div style="background:#f8fafc;border:1px solid #e6eaf0;border-radius:14px;padding:14px;font-size:14px;color:#243244;">{{notes}}</div>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:20px 26px 6px;text-align:center;">
+        <a href="{{receipt_url}}" style="display:inline-block;font-size:13px;color:#1d4ed8;text-decoration:underline;">🖼️ عرض صورة الإيصال</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:22px 26px 30px;text-align:center;">
+        <a href="{{orders_url}}" style="display:inline-block;background:#1d4ed8;color:#ffffff;font-size:16px;font-weight:800;text-decoration:none;padding:14px 34px;border-radius:999px;">فتح لوحة التحكم</a>
+        <div style="margin-top:16px;font-size:12px;color:#94a3b8;">{{store_name}} — {{site_url}}</div>
+      </td>
+    </tr>
+  </table>
+</div>
