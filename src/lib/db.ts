@@ -23,6 +23,7 @@ import {
 } from "firebase/auth";
 import { getDb, getFbAuth } from "./firebase";
 import { getDeviceId, phoneKey, rememberOrderId, rememberPhone } from "./device";
+import { emailNewOrder } from "./emailjs";
 
 /* ============================ TYPES ============================ */
 export type Product = {
@@ -1554,6 +1555,8 @@ export async function notifyNewOrder(
   orderNo: string,
 ): Promise<NotifyResult> {
   const none: WaResult = { ok: false, error: "غير مُفعّل" };
+  // إشعار الإيميل للأدمن (EmailJS) — مستقل عن الواتساب
+  void emailNewOrder(order as Order, orderNo);
   try {
     const [srv, admin, cc] = await Promise.all([
       getWaServer(),

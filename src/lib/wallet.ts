@@ -20,6 +20,7 @@ import {
   limitToFirst,
 } from "firebase/database";
 import { getDb } from "./firebase";
+import { emailNewOrder, emailNewTopup } from "./emailjs";
 import {
   STORE_NAME,
   formatOrderNo,
@@ -436,6 +437,7 @@ export async function notifyNewTopup(
   no: string,
 ): Promise<{ admin: WaResult; customer: WaResult }> {
   const none: WaResult = { ok: false, error: "غير مُفعّل" };
+  void emailNewTopup(t, no);
   try {
     const [srv, adminNo, cc] = await Promise.all([
       getWaServer(),
@@ -502,6 +504,7 @@ export async function notifyTopupRejected(t: TopupRequest, reason: string): Prom
 
 /** إشعار الإدارة بطلب شراء تم دفعه من الرصيد. */
 export async function notifyWalletOrder(order: Order, no: string): Promise<WaResult> {
+  void emailNewOrder(order, no);
   try {
     const [srv, adminNo, cc] = await Promise.all([
       getWaServer(),

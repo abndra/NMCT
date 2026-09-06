@@ -93,6 +93,7 @@ import {
   type Announcement,
   type DiscountCode,
 } from "@/lib/db";
+import { emailTestOrder } from "@/lib/emailjs";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -1717,6 +1718,27 @@ function SettingsTab() {
         >
           {lang === "ar" ? "حفظ" : "Save"}
         </button>
+
+        <div className="mt-2 space-y-2 rounded-xl border border-border p-4">
+          <p className="font-display text-sm">
+            {lang === "ar" ? "إشعارات الإيميل (EmailJS)" : "Email notifications (EmailJS)"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {lang === "ar"
+              ? "كل طلب جديد أو طلب شحن رصيد يوصلك إشعار على الإيميل المكتوب في حقل To Email داخل قالب EmailJS."
+              : "Every new order or top-up request emails the address set in the template's To Email field."}
+          </p>
+          <button
+            onClick={async () => {
+              const r = await emailTestOrder();
+              if (r.ok) toast.success(lang === "ar" ? "تم إرسال إيميل تجريبي ✅" : "Test email sent ✅");
+              else toast.error(r.error || (lang === "ar" ? "فشل الإرسال" : "Send failed"));
+            }}
+            className="h-11 w-full rounded-xl border border-primary px-4 font-display text-sm text-primary"
+          >
+            {lang === "ar" ? "إرسال إيميل تجريبي" : "Send test email"}
+          </button>
+        </div>
       </div>
 
       <div className={cardCls}>
