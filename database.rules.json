@@ -113,12 +113,31 @@
       }
     },
 
+    "banned_devices": {
+      ".read": true,
+      "$did": {
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (root.child('users').child(auth.uid).child('banned').val() === true && newData.child('uid').val() === auth.uid))"
+      }
+    },
+    "banned_fingerprints": {
+      ".read": true,
+      "$fp": {
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (root.child('users').child(auth.uid).child('banned').val() === true && newData.child('uid').val() === auth.uid))"
+      }
+    },
+    "banned_emails": {
+      ".read": true,
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
+
     "users": {
       ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true)",
         "banned": { ".write": "auth != null && root.child('admins').child(auth.uid).val() === true" },
+        "bannedAt": { ".write": "auth != null && root.child('admins').child(auth.uid).val() === true" },
+        "devices": { ".write": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true)" },
         "balance": {
           ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (auth.uid === $uid && newData.isNumber() && newData.val() >= 0 && newData.val() <= (data.exists() ? data.val() : 0)))",
           ".validate": "newData.isNumber() && newData.val() >= 0"
