@@ -22,7 +22,7 @@ import {
   type User,
 } from "firebase/auth";
 import { getDb, getFbAuth } from "./firebase";
-import { getDeviceId, phoneKey, rememberOrderId, rememberPhone } from "./device";
+import { getDeviceId, getFingerprint, phoneKey, rememberOrderId, rememberPhone } from "./device";
 import { emailNewOrder } from "./emailjs";
 
 /* ============================ TYPES ============================ */
@@ -108,6 +108,11 @@ export type OrderItem = {
   image?: string;
   size?: string;
   addons?: string[];
+  /** Product coupon applied to this line before it was added to the cart. */
+  coupon?: string;
+  couponId?: string;
+  /** Price before the product coupon. */
+  originalPrice?: number;
 };
 
 export type Order = {
@@ -211,7 +216,17 @@ export type DiscountCode = {
   active?: boolean;
   maxUses?: number;
   usedCount?: number;
+  /** Product this coupon belongs to. Empty = works on the whole cart at checkout. */
+  productId?: string;
+  productName?: string;
 };
+
+/** Price of one unit after a coupon is applied. */
+export function applyCoupon(price: number, c: Pick<DiscountCode, "percent" | "amount">) {
+  const base = Number(price) || 0;
+  const off = c.percent ? (base * Number(c.percent)) / 100 : Number(c.amount) || 0;
+  return Math.max(0, Number((base - off).toFixed(3)));
+}
 
 /* ============================ HELPERS ============================ */
 function listFromSnap<T>(snap: { exists: () => boolean; val: () => Record<string, unknown> }): T[] {
@@ -268,14 +283,29 @@ async function saveUser(fbUser: User) {
   // Authentication must not fail merely because optional profile storage is
   // unavailable. Realtime Database rules can be deployed independently from
   // Firebase Auth, so keep this synchronization best-effort.
+  const deviceId = getDeviceId();
+  const fp = await getFingerprint();
   try {
     const snap = await get(userRef);
     const existing = (snap.exists() ? snap.val() : {}) as { banned?: boolean };
-    if (existing.banned) {
+    const banned =
+      existing.banned ||
+      (await checkBanned({ deviceId, fp, email: fbUser.email || "" }));
+    if (banned) {
+      // A banned account signing in from a new device drags that device into the ban too.
+      try {
+        await update(ref(db), {
+          ["banned_devices/" + deviceId]: { uid: fbUser.uid, at: Date.now() },
+          ...(fp ? { ["banned_fingerprints/" + fp]: { uid: fbUser.uid, at: Date.now() } } : {}),
+        });
+      } catch {
+        /* ignore */
+      }
       await signOut(getFbAuth());
       throw new Error("banned");
     }
     await update(userRef, profile);
+    await registerDevice(fbUser.uid, deviceId, fp);
   } catch (error) {
     if ((error as Error)?.message === "banned") throw error;
     console.warn("Unable to synchronize Firebase user profile", error);
@@ -800,15 +830,23 @@ export async function addDiscountCode(code: Omit<DiscountCode, "id">) {
 export async function deleteDiscountCode(id: string) {
   await remove(ref(getDb(), "discountCodes/" + id));
 }
-export async function validateDiscountCode(code: string): Promise<DiscountCode | null> {
+/**
+ * Validates a coupon. With `productId` only coupons made for that product
+ * match; without it only cart-wide coupons (no productId) match.
+ */
+export async function validateDiscountCode(
+  code: string,
+  productId?: string,
+): Promise<DiscountCode | null> {
   const snap = await get(ref(getDb(), "discountCodes"));
   const all = listFromSnap<DiscountCode>(snap);
+  const wanted = String(code || "")
+    .trim()
+    .toLowerCase();
   const found = all.find(
     (c) =>
-      String(c.code || "").toLowerCase() ===
-      String(code || "")
-        .trim()
-        .toLowerCase(),
+      String(c.code || "").toLowerCase() === wanted &&
+      (productId ? c.productId === productId : !c.productId),
   );
   if (!found || found.active === false) return null;
   if (found.maxUses && (found.usedCount || 0) >= found.maxUses) return null;
@@ -947,8 +985,113 @@ export async function ensurePaymentMethods() {
 export function onUsersChange(cb: (items: { id: string }[]) => void): Unsub {
   return onValue(ref(getDb(), "users"), (snap) => cb(listFromSnap(snap)));
 }
+/* ============================ BAN SYSTEM ============================ */
+export type KnownDevice = {
+  fp?: string;
+  ua?: string;
+  lastSeen?: number;
+};
+
+/** Every device a Google account was ever seen on (deviceId -> info). */
+export type UserDevices = Record<string, KnownDevice>;
+
+/**
+ * Full ban: the Google account itself AND every device / fingerprint it was
+ * ever seen on. Banned devices cannot open the site at all, even signed out
+ * or with another account.
+ */
 export async function banUser(uid: string, banned: boolean) {
-  await update(ref(getDb(), "users/" + uid), { banned });
+  const db = getDb();
+  const snap = await get(ref(db, "users/" + uid + "/devices"));
+  const devices = (snap.exists() ? snap.val() : {}) as UserDevices;
+  const emailSnap = await get(ref(db, "users/" + uid + "/email"));
+  const email = String(emailSnap.exists() ? emailSnap.val() : "").toLowerCase();
+  const at = Date.now();
+  const writes: Record<string, unknown> = {
+    ["users/" + uid + "/banned"]: banned,
+    ["users/" + uid + "/bannedAt"]: banned ? at : 0,
+  };
+  if (email) writes["banned_emails/" + emailKey(email)] = banned ? { uid, at } : null;
+  for (const [deviceId, info] of Object.entries(devices)) {
+    if (deviceId) writes["banned_devices/" + deviceId] = banned ? { uid, at } : null;
+    if (info?.fp) writes["banned_fingerprints/" + info.fp] = banned ? { uid, at } : null;
+  }
+  await update(ref(db), writes);
+}
+
+export function emailKey(email: string) {
+  return String(email || "")
+    .toLowerCase()
+    .replace(/[.#$/[\]]/g, "_");
+}
+
+/** Records the current device under the signed-in account (used later by the ban). */
+export async function registerDevice(uid: string, deviceId: string, fp: string) {
+  if (!uid || !deviceId) return;
+  try {
+    await update(ref(getDb(), "users/" + uid + "/devices/" + deviceId), {
+      fp: fp || "",
+      ua: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 200) : "",
+      lastSeen: Date.now(),
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+/** True when this device / fingerprint / account / email is banned. */
+export async function checkBanned(opts: {
+  deviceId?: string;
+  fp?: string;
+  uid?: string;
+  email?: string;
+}): Promise<boolean> {
+  const db = getDb();
+  const reads: Promise<boolean>[] = [];
+  const has = async (path: string) => {
+    try {
+      const s = await get(ref(db, path));
+      return s.exists() && s.val() !== false && s.val() !== null;
+    } catch {
+      return false;
+    }
+  };
+  if (opts.deviceId) reads.push(has("banned_devices/" + opts.deviceId));
+  if (opts.fp) reads.push(has("banned_fingerprints/" + opts.fp));
+  if (opts.uid) reads.push(has("users/" + opts.uid + "/banned"));
+  if (opts.email) reads.push(has("banned_emails/" + emailKey(opts.email)));
+  const res = await Promise.all(reads);
+  return res.some(Boolean);
+}
+
+/** Live listener on the ban flags of this device / account. */
+export function onBanChange(
+  opts: { deviceId?: string; fp?: string; uid?: string },
+  cb: (banned: boolean) => void,
+): Unsub {
+  const db = getDb();
+  const flags = new Map<string, boolean>();
+  const emit = () => cb([...flags.values()].some(Boolean));
+  const subs: Unsub[] = [];
+  const watch = (path: string) =>
+    subs.push(
+      onValue(
+        ref(db, path),
+        (s) => {
+          flags.set(path, s.exists() && s.val() !== false && s.val() !== null);
+          emit();
+        },
+        () => {
+          flags.set(path, false);
+          emit();
+        },
+      ),
+    );
+  if (opts.deviceId) watch("banned_devices/" + opts.deviceId);
+  if (opts.fp) watch("banned_fingerprints/" + opts.fp);
+  if (opts.uid) watch("users/" + opts.uid + "/banned");
+  if (!subs.length) cb(false);
+  return () => subs.forEach((u) => u());
 }
 export async function trackVisit(page: string) {
   try {

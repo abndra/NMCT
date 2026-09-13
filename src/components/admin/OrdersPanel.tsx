@@ -459,6 +459,12 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
                   <p className="text-xs text-muted-foreground">
                     {priceText(it.price, lang)} × {it.qty}
                     {it.size ? ` · ${it.size}` : ""}
+                    {it.coupon ? (
+                      <span className="ms-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary">
+                        🎟 {it.coupon}
+                        {it.originalPrice ? ` (${priceText(it.originalPrice, lang)})` : ""}
+                      </span>
+                    ) : null}
                   </p>
                 </div>
                 <span className="font-tech text-sm">{priceText(it.price * it.qty, lang)}</span>
@@ -519,6 +525,64 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
             </div>
           )}
 
+        </div>
+
+        {/* WHAT THE CUSTOMER RECEIVED */}
+        <div className={`${card} border-primary/40`}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-display text-sm text-primary">
+              {lang === "ar" ? "ما وصل للزبون" : "Delivered to customer"}
+            </p>
+            {o.deliveredAt ? (
+              <span className="text-[11px] text-muted-foreground">
+                {new Date(o.deliveredAt).toLocaleString(lang === "ar" ? "ar" : "en-GB")}
+              </span>
+            ) : null}
+          </div>
+          {Array.isArray(o.deliveredCodes) && o.deliveredCodes.length > 0 ? (
+            <div className="space-y-2">
+              {o.deliveredCodes.map((d, i) => (
+                <div
+                  key={i}
+                  className="space-y-1 rounded-xl border border-border/60 bg-background/60 p-2 text-xs"
+                >
+                  <p className="text-muted-foreground">{d.productName}</p>
+                  {d.image ? (
+                    <a href={d.image} target="_blank" rel="noreferrer" className="block">
+                      <img
+                        src={d.image}
+                        alt={d.productName}
+                        className="max-h-40 w-full rounded-lg border border-border object-contain"
+                      />
+                    </a>
+                  ) : null}
+                  {d.code ? (
+                    <div className="flex items-center gap-2">
+                      <p className="flex-1 select-all break-all rounded-lg border border-primary/40 bg-primary/5 p-2 font-tech text-sm">
+                        {d.code}
+                      </p>
+                      <button
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(d.code || "");
+                          toast.success(lang === "ar" ? "تم النسخ" : "Copied");
+                        }}
+                        className="grid size-9 shrink-0 place-items-center rounded-lg border border-border"
+                        aria-label="copy"
+                      >
+                        <Copy className="size-4" />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {lang === "ar"
+                ? "لم يُسلَّم أي محتوى لهذا الطلب بعد."
+                : "Nothing has been delivered for this order yet."}
+            </p>
+          )}
         </div>
       </div>
 

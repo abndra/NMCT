@@ -1,7 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { User } from "firebase/auth";
-import { onAuthChange, signInWithGoogle, logoutUser, handleRedirectResult } from "@/lib/db";
+import { ShieldBan } from "lucide-react";
+import {
+  onAuthChange,
+  signInWithGoogle,
+  logoutUser,
+  handleRedirectResult,
+  onBanChange,
+  registerDevice,
+} from "@/lib/db";
+import { getDeviceId, getFingerprint } from "@/lib/device";
 import { useI18n } from "@/lib/i18n";
 
 type AuthCtx = {
@@ -16,11 +25,31 @@ type AuthCtx = {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
+/** Full-screen wall shown to banned accounts / devices. Nothing else renders. */
+function BannedScreen() {
+  return (
+    <div className="fixed inset-0 z-[9999] grid place-items-center bg-background p-6 text-center">
+      <div className="w-full max-w-md rounded-3xl border-2 border-destructive/60 bg-destructive/10 p-10 shadow-2xl">
+        <ShieldBan className="mx-auto size-16 text-destructive" />
+        <h1 className="mt-5 font-display text-4xl text-destructive">أنت محظور</h1>
+        <p className="mt-3 text-sm text-destructive/90">
+          تم حظر حسابك وجهازك من الوصول إلى هذا الموقع نهائياً.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground" dir="ltr">
+          You are banned. This account and device are permanently blocked.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [banned, setBanned] = useState(false);
+  const [device, setDevice] = useState<{ id: string; fp: string } | null>(null);
   const { lang } = useI18n();
 
   useEffect(() => {
@@ -37,6 +66,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return () => unsub();
   }, []);
+
+  // device identity (id + fingerprint) used by the ban system
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const id = getDeviceId();
+      const fp = await getFingerprint();
+      if (alive) setDevice({ id, fp });
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // live ban watch: device, fingerprint and signed-in account
+  useEffect(() => {
+    if (!device) return;
+    let unsub = () => {};
+    try {
+      unsub = onBanChange({ deviceId: device.id, fp: device.fp, uid: user?.uid || "" }, (b) => {
+        setBanned(b);
+        if (b && user?.uid) void logoutUser(user.uid);
+      });
+    } catch {
+      /* ignore */
+    }
+    return () => unsub();
+  }, [device, user?.uid]);
+
+  // remember every device this account signs in from
+  useEffect(() => {
+    if (!device || !user?.uid) return;
+    void registerDevice(user.uid, device.id, device.fp);
+  }, [device, user?.uid]);
 
   const signIn = useCallback(async () => {
     setBusy(true);
@@ -102,6 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [user, lang],
   );
+
+  if (banned) return <BannedScreen />;
 
   return (
     <Ctx.Provider value={{ user, loading, signIn, signOut, requireAuth, promptLogin }}>

@@ -13,7 +13,7 @@ import {
   Copy,
   Check,
   Download,
-
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Layout } from "@/components/site/Layout";
@@ -104,6 +104,12 @@ function OrdersPage() {
     return () => unsub();
   }, [device, ids, user?.uid]);
 
+  const previous = useMemo(
+    () => orders.filter((o) => o.status === "delivered" || o.status === "rejected"),
+    [orders],
+  );
+  const [showPrev, setShowPrev] = useState(false);
+
   const list = useMemo(() => {
     if (tab === "active")
       return orders.filter((o) => o.status !== "delivered" && o.status !== "rejected");
@@ -136,6 +142,65 @@ function OrdersPage() {
               <GoogleMark className="size-4" />
               {lang === "ar" ? "تسجيل الدخول" : "Sign in"}
             </button>
+          </div>
+        )}
+
+        {/* PREVIOUS ORDERS */}
+        {previous.length > 0 && (
+          <div className="mt-5 rounded-2xl border border-border bg-card/60">
+            <button
+              onClick={() => setShowPrev((v) => !v)}
+              className="flex w-full items-center gap-3 p-4 text-start"
+            >
+              <span className="grid size-10 place-items-center rounded-xl bg-primary/15 text-primary">
+                <History className="size-5" />
+              </span>
+              <span className="flex-1">
+                <span className="block font-display">
+                  {lang === "ar" ? "الطلبات السابقة" : "Previous orders"}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {previous.length} {lang === "ar" ? "طلب منتهي" : "finished"}
+                </span>
+              </span>
+              <ChevronDown
+                className={`size-5 text-muted-foreground transition-transform ${showPrev ? "rotate-180" : ""}`}
+              />
+            </button>
+            {showPrev && (
+              <div className="divide-y divide-border border-t border-border">
+                {previous.map((o) => (
+                  <button
+                    key={o.id}
+                    onClick={() => {
+                      setTab("done");
+                      setOpen(o.id);
+                      setShowPrev(false);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-start hover:bg-background/60"
+                  >
+                    {o.items?.[0]?.image && (
+                      <img src={o.items[0].image} alt="" className="size-10 rounded-lg object-cover" />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm">
+                        {o.items?.map((i) => i.name).join("، ") || `#${formatOrderNo(o)}`}
+                      </span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        #{formatOrderNo(o)} ·{" "}
+                        {new Date(o.createdAt).toLocaleDateString(lang === "ar" ? "ar" : "en-GB")}
+                      </span>
+                    </span>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[11px] ${statusTone(o.status)}`}
+                    >
+                      {statusLabel(o.status, lang)}
+                    </span>
+                    <span className="font-tech text-sm text-primary">{fmt(o.total)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -224,6 +289,11 @@ function OrdersPage() {
                         <span className="flex-1 truncate text-muted-foreground">
                           {it.name} × {it.qty}
                           {it.size ? ` · ${it.size}` : ""}
+                          {it.coupon ? (
+                            <span className="ms-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary">
+                              🎟 {it.coupon}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="font-tech">{fmt(it.price * it.qty)}</span>
                       </div>

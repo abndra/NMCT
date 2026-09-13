@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ArrowLeft, Heart, ShoppingCart, Minus, Plus, ShieldCheck, Truck, Zap } from "lucide-react";
+import { ArrowRight, ArrowLeft, BadgePercent, Heart, ShoppingCart, Minus, Plus, ShieldCheck, Truck, Zap, X } from "lucide-react";
 import { toast } from "sonner";
 import { Layout } from "@/components/site/Layout";
 import { ProductCard, priceText } from "@/components/site/ProductCard";
@@ -9,7 +9,7 @@ import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "@/lib/currency";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
-import { availableStock, isLowStock, isOutOfStock } from "@/lib/db";
+import { applyCoupon, availableStock, isLowStock, isOutOfStock, validateDiscountCode, type DiscountCode } from "@/lib/db";
 
 export const Route = createFileRoute("/product/$id")({
   head: () => ({
@@ -34,6 +34,9 @@ function ProductPage() {
   const [active, setActive] = useState(0);
   const [size, setSize] = useState<string | undefined>(undefined);
   const [qty, setQty] = useState(1);
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<DiscountCode | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
 
   const product = useMemo(() => visible.find((p) => p.id === id), [visible, id]);
   const left = product ? availableStock(product) : 0;
@@ -91,7 +94,28 @@ function ProductPage() {
   const name = lang === "en" && product.nameEn ? product.nameEn : product.name;
   const desc = lang === "en" && product.descriptionEn ? product.descriptionEn : product.description;
   const sizePrice = product.sizes?.find((s) => s.name === size)?.price;
-  const unit = typeof sizePrice === "number" && sizePrice > 0 ? sizePrice : product.price;
+  const baseUnit = typeof sizePrice === "number" && sizePrice > 0 ? sizePrice : product.price;
+  const unit = coupon ? applyCoupon(baseUnit, coupon) : baseUnit;
+
+  const applyProductCoupon = async () => {
+    const code = couponInput.trim();
+    if (!code) return;
+    setCouponBusy(true);
+    try {
+      const found = await validateDiscountCode(code, product.id);
+      if (!found) {
+        setCoupon(null);
+        toast.error(lang === "ar" ? "الكوبون غير صالح لهذا المنتج" : "Coupon not valid for this product");
+      } else {
+        setCoupon(found);
+        toast.success(lang === "ar" ? "تم تطبيق الكوبون" : "Coupon applied");
+      }
+    } catch {
+      toast.error(lang === "ar" ? "تعذر التحقق من الكوبون" : "Could not check coupon");
+    } finally {
+      setCouponBusy(false);
+    }
+  };
   const off =
     product.oldPrice && product.oldPrice > product.price
       ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
@@ -152,7 +176,10 @@ function ProductPage() {
 
             <div className="flex flex-wrap items-center gap-3">
               <span className="font-display text-4xl text-primary">{fmt(unit)}</span>
-              {product.oldPrice && product.oldPrice > product.price && (
+              {coupon && (
+                <span className="text-lg text-muted-foreground line-through">{fmt(baseUnit)}</span>
+              )}
+              {!coupon && product.oldPrice && product.oldPrice > product.price && (
                 <span className="text-lg text-muted-foreground line-through">
                   {fmt(product.oldPrice)}
                 </span>
@@ -214,6 +241,54 @@ function ProductPage() {
               )}
             </div>
 
+            {/* PRODUCT COUPON */}
+            <div className="rounded-2xl border border-border bg-card p-3">
+              <p className="mb-2 flex items-center gap-2 font-tech text-xs uppercase text-muted-foreground">
+                <BadgePercent className="size-4 text-primary" />
+                {lang === "ar" ? "كوبون المنتج (اختياري)" : "Product coupon (optional)"}
+              </p>
+              {coupon ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/50 bg-primary/10 px-3 py-2">
+                  <div>
+                    <p className="font-tech text-sm text-primary">{coupon.code}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {coupon.percent
+                        ? `-${coupon.percent}%`
+                        : `-${fmt(Number(coupon.amount) || 0)}`}{" "}
+                      · {lang === "ar" ? "السعر الجديد" : "new price"} {fmt(unit)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCoupon(null);
+                      setCouponInput("");
+                    }}
+                    className="grid size-8 place-items-center rounded-lg border border-border text-muted-foreground"
+                    aria-label="remove coupon"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && requireAuth(() => void applyProductCoupon())}
+                    placeholder={lang === "ar" ? "أدخل الكوبون" : "Enter coupon"}
+                    className="h-11 flex-1 rounded-xl border border-border bg-background px-3 font-tech text-sm outline-none focus:border-primary"
+                  />
+                  <button
+                    disabled={couponBusy || !couponInput.trim()}
+                    onClick={() => requireAuth(() => void applyProductCoupon())}
+                    className="h-11 rounded-xl border border-primary/60 px-4 font-display text-sm text-primary disabled:opacity-50"
+                  >
+                    {couponBusy ? "…" : lang === "ar" ? "تطبيق" : "Apply"}
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center gap-3">
               <div className="flex h-12 items-center gap-4 rounded-xl border border-border bg-card px-3">
                 <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="-"><Minus className="size-4" /></button>
@@ -247,6 +322,16 @@ function ProductPage() {
                   const ok = add(product, {
                     qty: Math.min(qty, Math.max(0, left - inCart)),
                     ...(size ? { size } : {}),
+                    ...(coupon
+                      ? {
+                          coupon: {
+                            code: coupon.code,
+                            id: coupon.id,
+                            ...(coupon.percent ? { percent: coupon.percent } : {}),
+                            ...(coupon.amount ? { amount: coupon.amount } : {}),
+                          },
+                        }
+                      : {}),
                   });
                   if (ok) toast.success(t("added"));
                   else

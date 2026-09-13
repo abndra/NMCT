@@ -1451,12 +1451,35 @@ function CouponsTab() {
   const [code, setCode] = useState("");
   const [percent, setPercent] = useState("");
   const [amount, setAmount] = useState("");
+  const [productId, setProductId] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
   useEffect(() => onDiscountCodesChange(setCodes), []);
+  useEffect(() => onProductsChange(setProducts), []);
+  const productName = (id?: string) => products.find((p) => p.id === id)?.name || "";
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className={cardCls}>
         <Labeled label={lang === "ar" ? "الكود" : "Code"}>
           <input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} />
+        </Labeled>
+        <Labeled label={lang === "ar" ? "المنتج" : "Product"}>
+          <select
+            className={inputCls}
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+          >
+            <option value="">{lang === "ar" ? "كوبون عام (كل السلة)" : "General coupon (whole cart)"}</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {lang === "ar"
+              ? "كوبون المنتج يُدخله الزبون في صفحة المنتج قبل الإضافة للسلة ويظهر له السعر الجديد."
+              : "A product coupon is entered on the product page before adding to cart."}
+          </p>
         </Labeled>
         <div className="grid grid-cols-2 gap-3">
           <Labeled label={lang === "ar" ? "نسبة %" : "Percent %"}>
@@ -1485,10 +1508,12 @@ function CouponsTab() {
               amount: Number(amount) || 0,
               active: true,
               usedCount: 0,
+              ...(productId ? { productId, productName: productName(productId) } : {}),
             });
             setCode("");
             setPercent("");
             setAmount("");
+            setProductId("");
             toast.success(lang === "ar" ? "تمت الإضافة" : "Added");
           }}
           className="h-12 w-full rounded-xl bg-primary font-display text-primary-foreground"
@@ -1502,7 +1527,17 @@ function CouponsTab() {
             key={c.id}
             className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3"
           >
-            <span className="flex-1 font-tech">{c.code}</span>
+            <div className="flex-1">
+              <span className="font-tech">{c.code}</span>
+              <p className="text-[11px] text-muted-foreground">
+                {c.productId
+                  ? `🎯 ${productName(c.productId) || c.productName || c.productId}`
+                  : lang === "ar"
+                    ? "كوبون عام"
+                    : "General"}
+                {c.usedCount ? ` · ${c.usedCount}×` : ""}
+              </p>
+            </div>
             <span className="text-sm text-accent">
               {c.percent ? `${c.percent}%` : priceText(c.amount || 0, lang)}
             </span>

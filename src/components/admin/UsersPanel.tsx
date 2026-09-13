@@ -159,16 +159,40 @@ export function UsersPanel() {
                   {lang === "ar" ? "ضبط على المبلغ" : "Set exact"}
                 </button>
                 <button
-                  onClick={() => void banUser(u.id, !u.banned)}
-                  className="inline-flex h-11 items-center rounded-xl border border-border px-4 text-sm text-muted-foreground hover:border-destructive hover:text-destructive"
+                  onClick={async () => {
+                    if (
+                      !u.banned &&
+                      !confirm(
+                        lang === "ar"
+                          ? "حظر كامل: الحساب + كل أجهزته لن تستطيع فتح الموقع نهائياً. متأكد؟"
+                          : "Full ban: the account and all its devices will be blocked from the site. Sure?",
+                      )
+                    )
+                      return;
+                    try {
+                      await banUser(u.id, !u.banned);
+                      toast.success(
+                        u.banned
+                          ? lang === "ar" ? "تم فك الحظر" : "Unbanned"
+                          : lang === "ar" ? "تم الحظر الكامل للحساب وأجهزته" : "Account and devices banned",
+                      );
+                    } catch {
+                      toast.error(lang === "ar" ? "تعذر تنفيذ الحظر" : "Ban failed");
+                    }
+                  }}
+                  className={`inline-flex h-11 items-center rounded-xl border px-4 text-sm ${
+                    u.banned
+                      ? "border-destructive bg-destructive/15 text-destructive"
+                      : "border-border text-muted-foreground hover:border-destructive hover:text-destructive"
+                  }`}
                 >
                   {u.banned
                     ? lang === "ar"
-                      ? "إلغاء الحظر"
-                      : "Unban"
+                      ? "محظور — إلغاء الحظر"
+                      : "Banned — unban"
                     : lang === "ar"
-                      ? "حظر"
-                      : "Ban"}
+                      ? "حظر كامل (حساب + جهاز)"
+                      : "Full ban (account + device)"}
                 </button>
               </div>
             </div>

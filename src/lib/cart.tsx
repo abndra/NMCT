@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { availableStock, onProductsChange, type Product } from "./db";
+import { applyCoupon, availableStock, onProductsChange, type Product } from "./db";
 
 export type CartLine = {
   id: string;
@@ -10,6 +10,10 @@ export type CartLine = {
   size?: string | undefined;
   /** Real available stock at the moment the line was added/refreshed. */
   max?: number | undefined;
+  /** Product coupon applied before adding (price is already discounted). */
+  coupon?: string | undefined;
+  couponId?: string | undefined;
+  originalPrice?: number | undefined;
 };
 
 type Ctx = {
@@ -19,7 +23,15 @@ type Ctx = {
   open: boolean;
   setOpen: (v: boolean) => void;
   /** Adds to the cart, never above the real available stock. Returns true when it fitted. */
-  add: (p: Product, opts?: { size?: string; qty?: number }) => boolean;
+  add: (
+    p: Product,
+    opts?: {
+      size?: string;
+      qty?: number;
+      /** Product coupon already validated on the product page. */
+      coupon?: { code: string; id: string; percent?: number; amount?: number };
+    },
+  ) => boolean;
   setQty: (key: string, qty: number) => void;
   removeLine: (key: string) => void;
   clear: () => void;
@@ -34,8 +46,8 @@ const CartContext = createContext<Ctx | null>(null);
 const KEY = "nmct_cart";
 const WKEY = "nmct_wishlist";
 
-export const lineKey = (l: { id: string; size?: string | undefined }) =>
-  l.id + "::" + (l.size || "");
+export const lineKey = (l: { id: string; size?: string | undefined; coupon?: string | undefined }) =>
+  l.id + "::" + (l.size || "") + "::" + (l.coupon || "");
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -105,7 +117,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       add: (p, opts) => {
         const size = opts?.size;
         const extra = size ? p.sizes?.find((s) => s.name === size)?.price : undefined;
-        const price = typeof extra === "number" && extra > 0 ? extra : p.price;
+        const basePrice = typeof extra === "number" && extra > 0 ? extra : p.price;
+        const price = opts?.coupon ? applyCoupon(basePrice, opts.coupon) : basePrice;
         const stock = availableStock(p);
         if (stock <= 0) return false;
         // total already in the cart for this product (all sizes share the same stock)
@@ -122,6 +135,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
           max: stock,
           ...(p.image || p.images?.[0] ? { image: p.image || p.images?.[0] } : {}),
           ...(size ? { size } : {}),
+          ...(opts?.coupon
+            ? { coupon: opts.coupon.code, couponId: opts.coupon.id, originalPrice: basePrice }
+            : {}),
         };
         setLines((cur) => {
           const k = lineKey(line);
