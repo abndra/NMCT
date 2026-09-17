@@ -20,6 +20,9 @@ export function Footer() {
           <Link to="/orders" className="block text-sm text-muted-foreground hover:text-foreground">
             {t("orders")}
           </Link>
+          <Link to="/support" className="block text-sm text-muted-foreground hover:text-foreground">
+            {lang === "ar" ? "الدعم الفني" : "Support"}
+          </Link>
         </div>
         <div className="space-y-2">
           <h3 className="font-display text-lg text-primary">

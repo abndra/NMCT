@@ -28,6 +28,7 @@ export function Header() {
     { to: "/store", label: t("store") },
     { to: "/orders", label: t("trackOrders") },
     { to: "/wallet", label: lang === "ar" ? "محفظتي" : "Wallet" },
+    { to: "/support", label: lang === "ar" ? "الدعم" : "Support" },
   ];
 
   return (
