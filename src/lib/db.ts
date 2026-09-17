@@ -1763,3 +1763,49 @@ export async function notifyOrderRejected(order: Order, reason: string): Promise
     return { ok: false, error: e instanceof Error ? e.message : "خطأ" };
   }
 }
+
+/* ============================ SUPPORT TICKETS ============================ */
+export type SupportStatus = "open" | "done";
+export type SupportTicket = {
+  id: string;
+  name?: string;
+  phone: string;
+  message: string;
+  image?: string;
+  status: SupportStatus;
+  createdAt?: number;
+  reply?: string;
+};
+
+export function onSupportTicketsChange(cb: (items: SupportTicket[]) => void): Unsub {
+  return onValue(ref(getDb(), "support"), (snap) =>
+    cb(
+      listFromSnap<SupportTicket>(snap).sort(
+        (a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0),
+      ),
+    ),
+  );
+}
+
+export async function addSupportTicket(
+  input: Pick<SupportTicket, "name" | "phone" | "message" | "image">,
+) {
+  const r = push(ref(getDb(), "support"));
+  await set(r, {
+    name: input.name || "",
+    phone: input.phone,
+    message: input.message,
+    image: input.image || "",
+    status: "open",
+    createdAt: Date.now(),
+  });
+  return r.key;
+}
+
+export async function setSupportStatus(id: string, status: SupportStatus) {
+  await update(ref(getDb(), "support/" + id), { status });
+}
+
+export async function deleteSupportTicket(id: string) {
+  await remove(ref(getDb(), "support/" + id));
+}

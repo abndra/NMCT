@@ -10,6 +10,8 @@ import {
   FolderTree,
 
   LayoutDashboard,
+  LifeBuoy,
+  Star,
   Megaphone,
   PackageCheck,
   Pencil,
@@ -29,6 +31,8 @@ import { Layout } from "@/components/site/Layout";
 import { OrdersPanel } from "@/components/admin/OrdersPanel";
 import { TopupsPanel } from "@/components/admin/TopupsPanel";
 import { UsersPanel } from "@/components/admin/UsersPanel";
+import { ReviewsPanel } from "@/components/admin/ReviewsPanel";
+import { SupportPanel } from "@/components/admin/SupportPanel";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { useCategories, useProducts, useSettings } from "@/hooks/use-store-data";
@@ -115,6 +119,8 @@ const TABS = [
   "orders",
   "topups",
   "users",
+  "reviews",
+  "support",
   "coupons",
   "news",
   "settings",
@@ -129,6 +135,8 @@ const TAB_LABELS: Record<Tab, [string, string]> = {
   orders: ["الطلبات", "Orders"],
   topups: ["طلبات الشحن", "Top-ups"],
   users: ["المستخدمون", "Users"],
+  reviews: ["التقييمات", "Reviews"],
+  support: ["الدعم الفني", "Support"],
   coupons: ["أكواد الخصم", "Coupons"],
   news: ["الإعلانات", "Announcements"],
   settings: ["الإعدادات", "Settings"],
@@ -142,6 +150,8 @@ const TAB_ICONS: Record<Tab, React.ReactNode> = {
   orders: <PackageCheck />,
   topups: <Wallet />,
   users: <Users />,
+  reviews: <Star />,
+  support: <LifeBuoy />,
   coupons: <Percent />,
   news: <Megaphone />,
   settings: <Settings2 />,
@@ -296,6 +306,8 @@ function AdminPage() {
             {tab === "orders" && <OrdersTab />}
             {tab === "topups" && <TopupsPanel />}
             {tab === "users" && <UsersPanel />}
+            {tab === "reviews" && <ReviewsPanel />}
+            {tab === "support" && <SupportPanel />}
             {tab === "coupons" && <CouponsTab />}
             {tab === "news" && <NewsTab />}
             {tab === "settings" && <SettingsTab />}

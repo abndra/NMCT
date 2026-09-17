@@ -56,7 +56,10 @@ export function useReviews() {
     }
     return () => unsub();
   }, []);
-  return reviews;
+  // Only admin-approved reviews are shown publicly.
+  return reviews
+    .filter((r) => r.approved === true)
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 }
 
 export function useAnnouncements() {

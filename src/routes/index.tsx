@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { Flame, Sparkles } from "lucide-react";
 import { Layout } from "@/components/site/Layout";
 import { ProductCard } from "@/components/site/ProductCard";
+import { ReviewForm } from "@/components/site/ReviewForm";
 import { useCategories, useProducts, useReviews } from "@/hooks/use-store-data";
 import { useI18n } from "@/lib/i18n";
 import { siteBackground as heroAsset } from "@/lib/assets";
@@ -240,20 +241,25 @@ function Index() {
       )}
 
       {/* REVIEWS */}
-      {reviews.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 py-14">
-          <SectionHead title={t("reviews")} />
+      <section className="mx-auto max-w-7xl px-4 py-14">
+        <SectionHead title={t("reviews")} />
+        {reviews.length > 0 && (
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
             {reviews.slice(0, 6).map((r) => (
               <div key={r.id} className="rounded-2xl glass-panel p-5">
-                <p className="font-display text-accent">{"★".repeat(Math.max(1, r.rating || 5))}</p>
+                <p className="font-display text-accent">
+                  {"★".repeat(Math.max(1, Math.min(5, r.rating || 5)))}
+                </p>
                 <p className="mt-2 text-sm text-muted-foreground">{r.text}</p>
                 <p className="mt-3 font-display text-sm">{r.name}</p>
               </div>
             ))}
           </div>
-        </section>
-      )}
+        )}
+        <div className="mx-auto mt-8 max-w-xl">
+          <ReviewForm />
+        </div>
+      </section>
     </Layout>
   );
 }
