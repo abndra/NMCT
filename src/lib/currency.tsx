@@ -37,11 +37,11 @@ export function moneyOoredoo(omr: number, lang: "ar" | "en", card = false) {
 
 
 
-/** Formats an OMR amount in the requested currency. */
+/** Formats an OMR amount in the requested currency (OMR uses 3 decimals — baisa precision). */
 export function money(omr: number, currency: Currency, lang: "ar" | "en") {
   const v = Number(omr || 0);
   if (currency === "USDT") return `$${toUsdt(v).toFixed(2)}`;
-  return lang === "ar" ? `${v.toFixed(2)} ر.ع` : `OMR ${v.toFixed(2)}`;
+  return lang === "ar" ? `${v.toFixed(3)} ر.ع` : `OMR ${v.toFixed(3)}`;
 }
 
 type Ctx = {

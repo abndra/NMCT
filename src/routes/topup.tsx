@@ -11,12 +11,14 @@ import {
   Hash,
   Landmark,
   Loader2,
+  Receipt,
   ShieldCheck,
   Wallet,
   XCircle,
 } from "lucide-react";
 
 import { Layout } from "@/components/site/Layout";
+import { ImageUploader } from "@/components/site/ImageUploader";
 import { useAuth, GoogleMark } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "@/lib/currency";
@@ -72,6 +74,7 @@ function TopupPage() {
   const [cc, setCc] = useState(DEFAULT_COUNTRY_CODE);
   const [bankRef, setBankRef] = useState("");
   const [note, setNote] = useState("");
+  const [receipt, setReceipt] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [activeId, setActiveId] = useState<string>("");
 
@@ -122,6 +125,11 @@ function TopupPage() {
       );
       return;
     }
+    if (!receipt[0]) {
+      toast.error(lang === "ar" ? "أرفق صورة إيصال التحويل" : "Attach the transfer receipt image");
+      return;
+    }
+
 
     setBusy(true);
     try {
@@ -139,7 +147,7 @@ function TopupPage() {
         paymentMethodName: bank?.name || "تحويل بنكي",
         paymentCurrency: "OMR",
         amountToPay: amount.toFixed(3),
-        paymentProof: "bank-auto",
+        paymentProof: receipt[0] || "bank-auto",
         verification: "bank" as const,
         bankRef: ref,
         verifyDeadline: now + VERIFY_WINDOW_MS,
@@ -341,6 +349,19 @@ function TopupPage() {
                     : "The reference you used when transferring (shown in your bank app and confirmation)."}
                 </p>
               </label>
+
+              <div className="mt-4">
+                <span className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+                  <Receipt className="size-3" />
+                  {lang === "ar" ? "صورة إيصال التحويل *" : "Transfer receipt image *"}
+                </span>
+                <ImageUploader images={receipt} onChange={setReceipt} folder="topup-receipts" multiple={false} />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {lang === "ar"
+                    ? "أرفق لقطة شاشة أو صورة لإيصال التحويل البنكي — إجباري لإرسال الطلب."
+                    : "Attach a screenshot or photo of the bank transfer receipt — required."}
+                </p>
+              </div>
 
               <div className="mt-3">
                 <span className="mb-1 block text-xs text-muted-foreground">{lang === "ar" ? "ملاحظة (اختياري)" : "Note (optional)"}</span>
