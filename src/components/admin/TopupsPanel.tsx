@@ -13,20 +13,30 @@ import {
   type TopupStatus,
 } from "@/lib/wallet";
 
-const money = (n: number) => `${(Number(n) || 0).toFixed(2)} ر.ع`;
+const money = (n: number) => `${(Number(n) || 0).toFixed(3)} ر.ع`;
 
 const FILTERS: { key: TopupStatus | "all"; ar: string; en: string }[] = [
+  { key: "verifying", ar: "قيد التحقق", en: "Verifying" },
   { key: "pending", ar: "قيد المراجعة", en: "Pending" },
   { key: "approved", ar: "مقبولة", en: "Approved" },
+  { key: "expired", ar: "انتهت المهلة", en: "Expired" },
   { key: "rejected", ar: "مرفوضة", en: "Rejected" },
   { key: "all", ar: "الكل", en: "All" },
 ];
+
+const STATUS_BADGE: Record<TopupStatus, [string, string, string]> = {
+  pending: ["قيد المراجعة", "Pending", "bg-amber-500/15 text-amber-400"],
+  verifying: ["قيد التحقق التلقائي", "Auto-verifying", "bg-sky-500/15 text-sky-400"],
+  approved: ["تمت الإضافة", "Credited", "bg-emerald-500/15 text-emerald-400"],
+  expired: ["انتهت مهلة التحقق", "Verification expired", "bg-destructive/15 text-destructive"],
+  rejected: ["مرفوض", "Rejected", "bg-destructive/15 text-destructive"],
+};
 
 /** طلبات شحن الرصيد في لوحة التحكم. */
 export function TopupsPanel() {
   const { lang } = useI18n();
   const [items, setItems] = useState<TopupRequest[]>([]);
-  const [filter, setFilter] = useState<TopupStatus | "all">("pending");
+  const [filter, setFilter] = useState<TopupStatus | "all">("verifying");
   const [busy, setBusy] = useState("");
 
   useEffect(() => onTopupsChange(setItems), []);
@@ -131,6 +141,27 @@ export function TopupsPanel() {
                     <span className="text-foreground">{t.packageName}</span>
                   </p>
                 )}
+                {t.bankRef && (
+                  <p>
+                    {lang === "ar" ? "مرجع التحويل:" : "Transfer ref:"}{" "}
+                    <span dir="ltr" className="font-tech text-foreground">
+                      {t.bankRef}
+                    </span>
+                  </p>
+                )}
+                {t.verifiedAt && (
+                  <p>
+                    {lang === "ar" ? "وقت التحقق:" : "Verified at:"}{" "}
+                    <span className="text-foreground">
+                      {new Date(t.verifiedAt).toLocaleString(lang === "ar" ? "ar-OM" : "en-GB")}
+                    </span>
+                    {t.verifiedBy === "bank-auto" && (
+                      <span className="ms-1 text-emerald-400">
+                        ({lang === "ar" ? "تلقائي" : "auto"})
+                      </span>
+                    )}
+                  </p>
+                )}
                 <p className="flex items-center gap-1.5">
                   <Clock className="size-3" />
                   {new Date(t.createdAt || Date.now()).toLocaleString(
@@ -160,39 +191,45 @@ export function TopupsPanel() {
               )}
 
               <div className="mt-4 flex flex-wrap gap-2">
-                {t.status === "pending" ? (
-                  <>
-                    <button
-                      disabled={busy === t.id}
-                      onClick={() => void accept(t)}
-                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-4 font-display text-sm text-primary-foreground disabled:opacity-60"
-                    >
-                      <Check className="size-4" />
-                      {lang === "ar" ? "قبول وإضافة الرصيد" : "Approve & credit"}
-                    </button>
-                    <button
-                      disabled={busy === t.id}
-                      onClick={() => void decline(t)}
-                      className="inline-flex h-11 items-center gap-2 rounded-xl border border-destructive px-4 font-display text-sm text-destructive disabled:opacity-60"
-                    >
-                      <X className="size-4" />
-                      {lang === "ar" ? "رفض" : "Reject"}
-                    </button>
-                  </>
-                ) : (
+                {t.status !== "approved" && (
                   <span
-                    className={`inline-flex h-11 items-center rounded-xl px-4 text-sm ${
-                      t.status === "approved"
-                        ? "bg-emerald-500/15 text-emerald-400"
-                        : "bg-destructive/15 text-destructive"
-                    }`}
+                    className={`inline-flex h-11 items-center rounded-xl px-4 text-sm ${STATUS_BADGE[t.status]?.[2] || ""}`}
                   >
-                    {t.status === "approved"
-                      ? lang === "ar"
-                        ? "تمت الإضافة"
-                        : "Credited"
-                      : `${lang === "ar" ? "مرفوض" : "Rejected"}${t.rejectionReason ? ` — ${t.rejectionReason}` : ""}`}
+                    {lang === "ar" ? STATUS_BADGE[t.status]?.[0] : STATUS_BADGE[t.status]?.[1]}
                   </span>
+                )}
+                {(t.status === "pending" || t.status === "verifying" || t.status === "expired") && (
+                  <button
+                    disabled={busy === t.id}
+                    onClick={() => void accept(t)}
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-4 font-display text-sm text-primary-foreground disabled:opacity-60"
+                  >
+                    <Check className="size-4" />
+                    {lang === "ar"
+                      ? t.status === "pending"
+                        ? "قبول وإضافة الرصيد"
+                        : "قبول يدوي وإضافة الرصيد"
+                      : "Approve & credit"}
+                  </button>
+                )}
+                {(t.status === "pending" || t.status === "verifying") && (
+                  <button
+                    disabled={busy === t.id}
+                    onClick={() => void decline(t)}
+                    className="inline-flex h-11 items-center gap-2 rounded-xl border border-destructive px-4 font-display text-sm text-destructive disabled:opacity-60"
+                  >
+                    <X className="size-4" />
+                    {lang === "ar" ? "رفض" : "Reject"}
+                  </button>
+                )}
+                {t.status === "approved" && (
+                  <span className="inline-flex h-11 items-center rounded-xl bg-emerald-500/15 px-4 text-sm text-emerald-400">
+                    {lang === "ar" ? "تمت الإضافة" : "Credited"}
+                    {t.verifiedBy === "bank-auto" && (lang === "ar" ? " — تحقق تلقائي" : " — auto-verified")}
+                  </span>
+                )}
+                {t.status === "rejected" && t.rejectionReason && (
+                  <span className="self-center text-xs text-muted-foreground">{t.rejectionReason}</span>
                 )}
                 <button
                   onClick={() => void remove(t)}
