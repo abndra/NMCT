@@ -14,7 +14,8 @@
     "admin": {
       ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
       ".write": false,
-      "uids": { ".read": "auth != null" }
+      "uids": { ".read": "auth != null" },
+      "bankVerify": { ".write": "auth != null && root.child('admins').child(auth.uid).val() === true" }
     },
 
 
@@ -105,16 +106,26 @@
     },
 
     "topups": {
-      ".indexOn": ["uid", "status", "createdAt"],
+      ".indexOn": ["uid", "status", "createdAt", "credited"],
       ".read": "(auth != null && root.child('admins').child(auth.uid).val() === true) || (query.orderByChild === 'uid' && auth != null && query.equalTo === auth.uid)",
       ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
       "$tid": {
         ".read": "auth != null && (data.child('uid').val() === auth.uid || root.child('admins').child(auth.uid).val() === true)",
         ".write": "auth != null && ((!data.exists() && newData.child('uid').val() === auth.uid) || root.child('admins').child(auth.uid).val() === true)",
         ".validate": "newData.hasChildren(['uid','amount','status','createdAt']) && newData.child('amount').isNumber() && newData.child('amount').val() > 0 && newData.child('amount').val() <= 500",
-        "status": { ".validate": "!data.exists() ? newData.val() === 'pending' : (auth != null && root.child('admins').child(auth.uid).val() === true)" },
+        "status": { ".validate": "!data.exists() ? (newData.val() === 'pending' || newData.val() === 'verifying') : (auth != null && root.child('admins').child(auth.uid).val() === true)" },
+        "bankRef": { ".validate": "newData.isString() && newData.val().length <= 40" },
         "$other": { ".validate": true }
       }
+    },
+
+    "bank_verify": {
+      ".read": false,
+      ".write": false,
+      "state":   { ".read": "auth != null && root.child('admins').child(auth.uid).val() === true" },
+      "log":     { ".read": "auth != null && root.child('admins').child(auth.uid).val() === true" },
+      "used_tx": { ".read": "auth != null && root.child('admins').child(auth.uid).val() === true" },
+      "gmail":   { ".read": false }
     },
 
     "wallet_tx": {
