@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Activity,
+  BookOpen,
   CheckCircle2,
   Clock,
   Download,
@@ -112,8 +113,16 @@ export function BankVerifyPanel() {
       await saveBankVerifyConfig(cfg);
       toast.success(ar ? "تم الحفظ" : "Saved");
       await ping();
-    } catch {
-      toast.error(ar ? "تعذر الحفظ" : "Save failed");
+    } catch (e) {
+      const msg = String((e as Error)?.message || e);
+      const denied = msg.startsWith("permission:");
+      toast.error(
+        denied
+          ? ar
+            ? "تعذر الحفظ: القواعد ترفض الكتابة على " + msg.slice(11) + " — حدّث قواعد قاعدة البيانات في Firebase"
+            : "Save failed: rules deny write to " + msg.slice(11)
+          : (ar ? "تعذر الحفظ: " : "Save failed: ") + msg,
+      );
     } finally {
       setSaving(false);
     }
@@ -284,6 +293,9 @@ export function BankVerifyPanel() {
           </div>
         )}
       </div>
+
+      {/* ------- شرح المتغيرات ------- */}
+      <VariablesGuide ar={ar} redirectUri={srv?.redirectUri} missing={srv?.missingConfig} />
 
       {/* ------- Gmail ------- */}
       <div className={cardCls}>
@@ -515,6 +527,129 @@ function Stat({
           {sub}
         </p>
       )}
+    </div>
+  );
+}
+
+/** دليل متغيرات البيئة داخل الصفحة: ماذا يعني كل متغير وكيف تضيفه. */
+function VariablesGuide({ ar, redirectUri, missing }: { ar: boolean; redirectUri?: string | undefined; missing?: string[] | undefined }) {
+  const vars: { name: string; descAr: string; descEn: string; where: { ar: string; en: string } }[] = [
+    {
+      name: "TOKEN",
+      descAr: "كلمة سر طويلة تخترعها أنت (أي نص عشوائي). نفس القيمة تُكتب في حقل التوكن أعلاه.",
+      descEn: "A long random string you invent. The same value goes in the token field above.",
+      where: { ar: "تختارها بنفسك", en: "You choose it" },
+    },
+    {
+      name: "ENCRYPTION_KEY",
+      descAr: "مفتاح تشفير 64 حرفاً لتشفير رمز Gmail قبل حفظه. أنشئه بالأمر: openssl rand -hex 32",
+      descEn: "64-char hex key encrypting the Gmail token. Generate with: openssl rand -hex 32",
+      where: { ar: "أنشئه محلياً بالأمر", en: "Generate locally" },
+    },
+    {
+      name: "GOOGLE_CLIENT_ID",
+      descAr: "معرّف عميل OAuth من Google Cloud.",
+      descEn: "OAuth client ID from Google Cloud.",
+      where: { ar: "Google Cloud › APIs & Services › Credentials › Create OAuth client ID (Web)", en: "Google Cloud › Credentials › Create OAuth client ID (Web)" },
+    },
+    {
+      name: "GOOGLE_CLIENT_SECRET",
+      descAr: "السر المرافق لعميل OAuth من نفس الصفحة.",
+      descEn: "The OAuth client secret from the same page.",
+      where: { ar: "نفس صفحة Credentials في Google Cloud", en: "Same Google Cloud Credentials page" },
+    },
+    {
+      name: "PUBLIC_URL",
+      descAr: "رابط خدمتك العام على Railway بدون / في النهاية، مثال: https://xxxx.up.railway.app",
+      descEn: "Your public Railway URL without trailing slash, e.g. https://xxxx.up.railway.app",
+      where: { ar: "Railway › Settings › Domains", en: "Railway › Settings › Domains" },
+    },
+    {
+      name: "SITE_URL",
+      descAr: "رابط الموقع الحالي (يُستخدم للرجوع بعد ربط Gmail وللسماح بالاتصال).",
+      descEn: "This site's URL (OAuth return + allowed origin).",
+      where: { ar: "انسخ رابط موقعك من المتصفح", en: "Copy your site URL from the browser" },
+    },
+    {
+      name: "FIREBASE_DB_URL",
+      descAr: "رابط قاعدة البيانات، مثال: https://xxxx-default-rtdb.firebaseio.com",
+      descEn: "Realtime Database URL, e.g. https://xxxx-default-rtdb.firebaseio.com",
+      where: { ar: "Firebase › Realtime Database (أعلى الصفحة)", en: "Firebase › Realtime Database (top of page)" },
+    },
+    {
+      name: "FIREBASE_DB_SECRET",
+      descAr: "سر قاعدة البيانات (Database secret) — قديم لكنه ما زال يعمل، ويمنح الخدمة وصولاً كاملاً.",
+      descEn: "Database secret — grants the service full database access.",
+      where: { ar: "Firebase › Project settings › Service accounts › Database secrets", en: "Firebase › Project settings › Service accounts › Database secrets" },
+    },
+    {
+      name: "FIREBASE_API_KEY",
+      descAr: "مفتاح الويب العام لمشروع Firebase (للتحقق من هوية المستخدمين فقط).",
+      descEn: "Public Firebase web API key (user identity checks only).",
+      where: { ar: "Firebase › Project settings › General › Web API Key", en: "Firebase › Project settings › General › Web API Key" },
+    },
+  ];
+
+  return (
+    <div className={cardCls}>
+      <div className="flex items-center gap-2">
+        <span className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
+          <BookOpen className="size-4" />
+        </span>
+        <h2 className="font-display text-lg">{ar ? "شرح المتغيرات وكيفية إضافتها" : "Variables guide"}</h2>
+      </div>
+
+      {!!missing?.length && (
+        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-400">
+          ⚠️ {ar ? "لهذا السبب يظهر «تعذر بدء الربط» — المتغيرات التالية ناقصة على Railway: " : "This is why linking fails — missing on Railway: "}
+          <span dir="ltr" className="font-tech">{missing.join(", ")}</span>
+        </p>
+      )}
+
+      <div className="space-y-2 text-xs text-muted-foreground">
+        <p className="font-semibold text-foreground">{ar ? "كيف أضيف المتغيرات؟" : "How do I add variables?"}</p>
+        <ol className="list-decimal space-y-1 ps-5">
+          <li>{ar ? "افتح مشروعك في Railway › اختر الخدمة › تبويب Variables." : "Open your Railway project › service › Variables tab."}</li>
+          <li>{ar ? "اضغط New Variable، اكتب الاسم تماماً كما في الجدول، والصق القيمة." : "Click New Variable, type the exact name, paste the value."}</li>
+          <li>{ar ? "بعد إضافة كل المتغيرات أعد النشر (Redeploy) ثم اضغط «فحص الاتصال» هنا." : "After adding all of them, redeploy, then press Test connection here."}</li>
+        </ol>
+        <p className="font-semibold text-foreground">{ar ? "قبل ذلك: فعّل Gmail API وأنشئ عميل OAuth" : "Before that: enable Gmail API and create the OAuth client"}</p>
+        <ol className="list-decimal space-y-1 ps-5">
+          <li>{ar ? "console.cloud.google.com › أنشئ مشروعاً › APIs & Services › Library › فعّل Gmail API." : "console.cloud.google.com › create a project › Library › enable Gmail API."}</li>
+          <li>{ar ? "OAuth consent screen › External › أكمل الإعداد وأضف بريدك كـ Test user." : "OAuth consent screen › External › finish setup and add your email as a Test user."}</li>
+          <li>
+            {ar ? "Credentials › Create OAuth client ID (Web) › أضف Redirect URI التالي بالضبط:" : "Credentials › Create OAuth client ID (Web) › add exactly this Redirect URI:"}
+            <span dir="ltr" className="mt-1 block select-all rounded-lg border border-border bg-background/60 p-2 font-tech text-foreground">
+              {redirectUri || "https://<your-service>.up.railway.app/oauth/google/callback"}
+            </span>
+          </li>
+          <li>{ar ? "انسخ Client ID و Client Secret إلى متغيرات Railway." : "Copy Client ID and Client Secret into Railway variables."}</li>
+        </ol>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <table className="w-full text-xs">
+          <thead className="bg-background/40 text-muted-foreground">
+            <tr className="text-start">
+              <th className="p-2 text-start">{ar ? "المتغير" : "Variable"}</th>
+              <th className="p-2 text-start">{ar ? "المعنى" : "Meaning"}</th>
+              <th className="p-2 text-start">{ar ? "من أين أحصل عليه" : "Where to get it"}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {vars.map((v) => (
+              <tr key={v.name} className={missing?.includes(v.name) ? "bg-amber-500/5" : ""}>
+                <td dir="ltr" className="p-2 font-tech text-primary">
+                  {v.name}
+                  {missing?.includes(v.name) && <span className="ms-1 text-amber-400">⚠️</span>}
+                </td>
+                <td className="p-2">{ar ? v.descAr : v.descEn}</td>
+                <td className="p-2 text-muted-foreground">{ar ? v.where.ar : v.where.en}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
