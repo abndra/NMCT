@@ -62,8 +62,25 @@ export async function getBankVerifyConfig(): Promise<BankVerifyConfig> {
 
 export async function saveBankVerifyConfig(cfg: BankVerifyConfig) {
   const url = normalizeWaServerUrl(cfg.url);
-  await set(ref(getDb(), "admin/bankVerify"), { url, token: cfg.token.trim() });
-  await set(ref(getDb(), "settings/bankVerifyUrl"), url);
+  // الإعداد الخاص بالأدمن أولاً، ثم الرابط العام. أي رفض صلاحيات يُعاد كرسالة واضحة.
+  try {
+    await set(ref(getDb(), "admin/bankVerify"), { url, token: cfg.token.trim() });
+  } catch (e) {
+    throw new Error(
+      (e as { code?: string })?.code === "PERMISSION_DENIED"
+        ? "permission:admin/bankVerify"
+        : String((e as Error)?.message || e),
+    );
+  }
+  try {
+    await set(ref(getDb(), "settings/bankVerifyUrl"), url);
+  } catch (e) {
+    throw new Error(
+      (e as { code?: string })?.code === "PERMISSION_DENIED"
+        ? "permission:settings/bankVerifyUrl"
+        : String((e as Error)?.message || e),
+    );
+  }
 }
 
 export async function getBankVerifyUrl(): Promise<string> {
