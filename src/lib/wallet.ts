@@ -37,7 +37,14 @@ import {
 } from "./db";
 
 /* ============================ TYPES ============================ */
-export type TopupStatus = "pending" | "approved" | "rejected";
+/**
+ * pending   = طلب قديم بانتظار مراجعة يدوية
+ * verifying = تحويل بنكي قيد التحقق التلقائي (3 دقائق)
+ * approved  = مقبول وأُضيف الرصيد
+ * expired   = انتهت مهلة التحقق بدون عملية مطابقة
+ * rejected  = مرفوض يدوياً
+ */
+export type TopupStatus = "pending" | "verifying" | "approved" | "expired" | "rejected";
 
 export type TopupRequest = {
   id: string;
@@ -63,6 +70,17 @@ export type TopupRequest = {
   rejectionReason?: string;
   createdAt: number;
   reviewedAt?: number;
+  /* ---- التحقق البنكي التلقائي ---- */
+  verification?: "bank";
+  /** رقم/مرجع التحويل الذي أدخله العميل */
+  bankRef?: string;
+  verifyDeadline?: number;
+  verifiedAt?: number;
+  verifiedBy?: "bank-auto" | "admin";
+  expiredAt?: number;
+  /** معرّف العملية البنكية (رسالة Gmail) المستخدمة */
+  bankTxId?: string;
+  credited?: boolean | "pending";
 };
 
 export type WalletTxType = "topup" | "purchase" | "admin";
@@ -88,7 +106,7 @@ export const TOPUP_PACKAGES = [
   { id: "xl", amount: 10, label: "باقة مميزة", labelEn: "Premium", bonus: 0.5 },
 ] as const;
 
-export const MIN_TOPUP = 0.5;
+export const MIN_TOPUP = 0.001;
 export const MAX_TOPUP = 500;
 
 function listFrom<T>(snap: {
@@ -166,6 +184,7 @@ export async function setBalance(uid: string, value: number, note = "") {
 /* ============================ TOPUP REQUESTS ============================ */
 export async function createTopupRequest(
   data: Omit<TopupRequest, "id" | "createdAt" | "status" | "number">,
+  status: Extract<TopupStatus, "pending" | "verifying"> = "pending",
 ): Promise<{ id: string; number: number }> {
   const db = getDb();
   let number = 1;
@@ -183,10 +202,19 @@ export async function createTopupRequest(
     ...data,
     amount: Number(data.amount) || 0,
     number,
-    status: "pending",
+    status,
     createdAt: Date.now(),
   });
   return { id: r.key as string, number };
+}
+
+/** متابعة طلب شحن واحد لحظياً (شاشة الانتظار بعد الإرسال). */
+export function onTopupChange(id: string, cb: (t: TopupRequest | null) => void): Unsub {
+  return onValue(
+    ref(getDb(), "topups/" + id),
+    (snap) => cb(snap.exists() ? ({ id, ...(snap.val() as object) } as TopupRequest) : null),
+    () => cb(null),
+  );
 }
 
 export function formatTopupNo(t: Pick<TopupRequest, "id" | "number">) {
@@ -219,32 +247,47 @@ export function onMyTopupsChange(uid: string, cb: (items: TopupRequest[]) => voi
   );
 }
 
-/** قبول طلب الشحن: يضيف المبلغ لرصيد المستخدم ويسجّل الحركة. */
+/**
+ * قبول طلب الشحن يدوياً: يقلب الحالة إلى approved بمعاملة ذرّية (حتى لا يتعارض مع
+ * التحقق التلقائي) ثم يضيف المبلغ لرصيد المستخدم مرة واحدة ويسجّل الحركة.
+ */
 export async function approveTopup(id: string, amountOverride?: number) {
   const db = getDb();
-  const snap = await get(ref(db, "topups/" + id));
-  if (!snap.exists()) return 0;
-  const t = { id, ...(snap.val() as object) } as TopupRequest;
-  if (t.status === "approved") return await getBalance(t.uid);
-  const amount = Number(amountOverride ?? t.amount) || 0;
-  const res = await runTransaction(ref(db, `users/${t.uid}/balance`), (cur) =>
-    (Number(cur) || 0) + amount,
+  let t: TopupRequest | null = null;
+  const flip = await runTransaction(ref(db, "topups/" + id), (cur) => {
+    if (!cur) return cur;
+    if (cur.status === "approved") return; // abort — مقبول مسبقاً
+    t = { id, ...(cur as object) } as TopupRequest;
+    return {
+      ...cur,
+      status: "approved",
+      amount: Number(amountOverride ?? cur.amount) || 0,
+      reviewedAt: Date.now(),
+      verifiedAt: Date.now(),
+      verifiedBy: "admin",
+      credited: false,
+    };
+  });
+  if (!flip.committed || !t) {
+    const snap = await get(ref(db, "topups/" + id));
+    return snap.exists() ? await getBalance((snap.val() as TopupRequest).uid) : 0;
+  }
+  const approved = t as TopupRequest;
+  const amount = Number(amountOverride ?? approved.amount) || 0;
+  const res = await runTransaction(ref(db, `users/${approved.uid}/balance`), (cur) =>
+    Number(((Number(cur) || 0) + amount).toFixed(3)),
   );
   const balanceAfter = Number(res.snapshot.val()) || 0;
-  await update(ref(db, "topups/" + id), {
-    status: "approved",
-    amount,
-    reviewedAt: Date.now(),
-  });
-  await addTx(t.uid, {
+  await update(ref(db, "topups/" + id), { credited: true, creditedAt: Date.now() });
+  await addTx(approved.uid, {
     type: "topup",
     amount,
     balanceAfter,
-    note: `شحن رصيد ${formatTopupNo(t)}`,
+    note: `شحن رصيد ${formatTopupNo(approved)}`,
     topupId: id,
     createdAt: Date.now(),
   });
-  void notifyTopupApproved(t, amount, balanceAfter);
+  void notifyTopupApproved(approved, amount, balanceAfter);
   return balanceAfter;
 }
 
@@ -407,7 +450,7 @@ export async function allocateUnitsForBuyer(
 }
 
 /* ============================ WHATSAPP ============================ */
-const money = (n: number) => `${(Number(n) || 0).toFixed(2)} ر.ع`;
+const money = (n: number) => `${(Number(n) || 0).toFixed(3)} ر.ع`;
 
 export function adminTopupMessage(t: Omit<TopupRequest, "id">, no: string) {
   return [
@@ -424,11 +467,14 @@ export function adminTopupMessage(t: Omit<TopupRequest, "id">, no: string) {
     ...(t.amountToPay
       ? [`🧾 *المبلغ المحوَّل:* ${t.amountToPay} ${t.paymentCurrency || ""}`]
       : []),
+    ...(t.bankRef ? [`🔖 *مرجع التحويل:* ${t.bankRef}`, "🤖 *التحقق:* تلقائي عبر إشعار البنك (3 دقائق)"] : []),
     ...(t.cardNumbers?.length ? [`🎟️ *أكواد البطاقات:* ${t.cardNumbers.join(" | ")}`] : []),
     ...(t.receiptImage ? [`🖼️ *الإيصال:* ${t.receiptImage}`] : []),
     ...(t.note ? [`🗒️ *ملاحظة:* ${t.note}`] : []),
     "━━━━━━━━━━━━━━",
-    "افتح لوحة التحكم › طلبات الشحن لقبول أو رفض الطلب.",
+    t.bankRef
+      ? "سيُقبل تلقائياً عند وصول إشعار بنكي مطابق. تابعه في لوحة التحكم › طلبات الشحن."
+      : "افتح لوحة التحكم › طلبات الشحن لقبول أو رفض الطلب.",
   ].join("\n");
 }
 
@@ -457,7 +503,9 @@ export async function notifyNewTopup(
               `🆔 رقم الطلب: ${no}`,
               `💵 المبلغ: ${money(t.amount)}`,
               "",
-              "استلمنا طلبك وسيتم إضافة الرصيد بعد مراجعة الإيصال. شكراً لثقتك 💚",
+              t.bankRef
+                ? "استلمنا طلبك وجارٍ التحقق من التحويل البنكي تلقائياً — يُضاف الرصيد فور التأكد 💚"
+                : "استلمنا طلبك وسيتم إضافة الرصيد بعد مراجعة الإيصال. شكراً لثقتك 💚",
             ].join("\n"),
             srv,
             cc,

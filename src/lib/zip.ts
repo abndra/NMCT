@@ -13,6 +13,22 @@ import waRailwayJson from "../../whatsapp-server/railway.json?raw";
 import waProcfile from "../../whatsapp-server/Procfile?raw";
 import waGitignore from "../../whatsapp-server/gitignore.txt?raw";
 
+import bvServer from "../../bank-verify-server/server.js?raw";
+import bvPackage from "../../bank-verify-server/package.json?raw";
+import bvReadme from "../../bank-verify-server/README.md?raw";
+import bvRailway from "../../bank-verify-server/railway.json?raw";
+import bvProcfile from "../../bank-verify-server/Procfile?raw";
+import bvGitignore from "../../bank-verify-server/gitignore.txt?raw";
+import bvEnvExample from "../../bank-verify-server/env.example.txt?raw";
+import bvConfig from "../../bank-verify-server/src/config.js?raw";
+import bvCrypto from "../../bank-verify-server/src/crypto.js?raw";
+import bvFirebase from "../../bank-verify-server/src/firebase.js?raw";
+import bvGmail from "../../bank-verify-server/src/gmail.js?raw";
+import bvOauth from "../../bank-verify-server/src/google-oauth.js?raw";
+import bvParser from "../../bank-verify-server/src/parser.js?raw";
+import bvRoutes from "../../bank-verify-server/src/routes.js?raw";
+import bvVerifier from "../../bank-verify-server/src/verifier.js?raw";
+
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
@@ -135,4 +151,32 @@ export async function downloadWhatsappServerZip() {
   const files = whatsappServerFiles();
   if (files.length < 3 || !files[0]!.content.includes("express")) throw new Error("server-files-missing");
   downloadBlob(makeZip(files), "whatsapp-server.zip");
+}
+
+/** ملفات خدمة التحقق البنكي (Railway) — مضمّنة في البناء. */
+export function bankVerifyServerFiles(): { name: string; content: string }[] {
+  return [
+    { name: "server.js", content: bvServer },
+    { name: "package.json", content: bvPackage },
+    { name: "README.md", content: bvReadme },
+    { name: "railway.json", content: bvRailway },
+    { name: "Procfile", content: bvProcfile },
+    { name: ".gitignore", content: bvGitignore },
+    { name: ".env.example", content: bvEnvExample },
+    { name: "src/config.js", content: bvConfig },
+    { name: "src/crypto.js", content: bvCrypto },
+    { name: "src/firebase.js", content: bvFirebase },
+    { name: "src/gmail.js", content: bvGmail },
+    { name: "src/google-oauth.js", content: bvOauth },
+    { name: "src/parser.js", content: bvParser },
+    { name: "src/routes.js", content: bvRoutes },
+    { name: "src/verifier.js", content: bvVerifier },
+  ].filter((f) => f.content && f.content.trim().length > 0);
+}
+
+/** تحميل ملفات نظام التحقق البنكي كـ ZIP جاهز للرفع على GitHub ثم Railway. */
+export async function downloadBankVerifyServerZip() {
+  const files = bankVerifyServerFiles();
+  if (files.length < 10 || !files[0]!.content.includes("express")) throw new Error("server-files-missing");
+  downloadBlob(makeZip(files), "nmct-bank-verify-server.zip");
 }

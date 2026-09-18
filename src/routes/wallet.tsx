@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "@/lib/currency";
 import { useBalance, useMyTopups, useMyWalletTx } from "@/hooks/use-wallet";
 import { formatTopupNo, type TopupStatus } from "@/lib/wallet";
+import { omr3 } from "@/lib/bank-verify";
 
 export const Route = createFileRoute("/wallet")({
   head: () => ({
@@ -26,15 +27,18 @@ export const Route = createFileRoute("/wallet")({
   component: WalletPage,
 });
 
-function statusStyle(s: TopupStatus) {
+export function statusStyle(s: TopupStatus) {
   if (s === "approved") return "bg-emerald-500/15 text-emerald-400";
-  if (s === "rejected") return "bg-destructive/15 text-destructive";
+  if (s === "rejected" || s === "expired") return "bg-destructive/15 text-destructive";
+  if (s === "verifying") return "bg-sky-500/15 text-sky-400";
   return "bg-amber-500/15 text-amber-400";
 }
 
-function statusLabel(s: TopupStatus, lang: "ar" | "en") {
+export function statusLabel(s: TopupStatus, lang: "ar" | "en") {
   if (s === "approved") return lang === "ar" ? "مقبول" : "Approved";
   if (s === "rejected") return lang === "ar" ? "مرفوض" : "Rejected";
+  if (s === "expired") return lang === "ar" ? "انتهت مهلة التحقق" : "Verification expired";
+  if (s === "verifying") return lang === "ar" ? "قيد التحقق" : "Verifying";
   return lang === "ar" ? "قيد المراجعة" : "Pending";
 }
 
@@ -127,18 +131,44 @@ function WalletPage() {
                         </span>
                       </div>
                       <div className="mt-2 flex items-center justify-between gap-3">
-                        <span className="font-display text-xl text-primary">{fmt(t.amount)}</span>
+                        <span className="font-display text-xl text-primary">
+                          {t.verification === "bank" ? omr3(t.amount, lang) : fmt(t.amount)}
+                        </span>
                         <span className="text-xs text-muted-foreground">
                           {t.paymentMethodName || t.paymentMethod}
+                          {t.bankRef && (
+                            <span dir="ltr" className="ms-2 font-tech">
+                              #{t.bankRef}
+                            </span>
+                          )}
                         </span>
                       </div>
                       <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                         <Clock className="size-3" />
                         {dateText(t.createdAt)}
+                        {t.verifiedAt && t.status === "approved" && (
+                          <span className="text-emerald-400">
+                            · {lang === "ar" ? "تم التحقق" : "verified"} {dateText(t.verifiedAt)}
+                          </span>
+                        )}
                       </p>
-                      {t.status === "rejected" && t.rejectionReason && (
+                      {t.status === "verifying" && (
+                        <Link
+                          to="/topup"
+                          className="mt-2 block rounded-xl bg-sky-500/10 p-2 text-xs text-sky-400"
+                        >
+                          {lang === "ar"
+                            ? "جارٍ التحقق التلقائي من التحويل البنكي (حتى 3 دقائق)…"
+                            : "Automatic bank verification in progress (up to 3 minutes)…"}
+                        </Link>
+                      )}
+                      {(t.status === "rejected" || t.status === "expired") && (
                         <p className="mt-2 rounded-xl bg-destructive/10 p-2 text-xs text-destructive">
-                          {t.rejectionReason}
+                          {t.status === "expired"
+                            ? lang === "ar"
+                              ? "لم يتم العثور على عملية بنكية مطابقة خلال فترة التحقق — لم يُضف أي رصيد."
+                              : "No matching bank transaction was found during the verification window — no balance added."
+                            : t.rejectionReason}
                         </p>
                       )}
                     </div>

@@ -30,6 +30,7 @@ import {
 import { Layout } from "@/components/site/Layout";
 import { OrdersPanel } from "@/components/admin/OrdersPanel";
 import { TopupsPanel } from "@/components/admin/TopupsPanel";
+import { BankVerifyPanel } from "@/components/admin/BankVerifyPanel";
 import { UsersPanel } from "@/components/admin/UsersPanel";
 import { ReviewsPanel } from "@/components/admin/ReviewsPanel";
 import { SupportPanel } from "@/components/admin/SupportPanel";
@@ -118,6 +119,7 @@ const TABS = [
   "categories",
   "orders",
   "topups",
+  "bankverify",
   "users",
   "reviews",
   "support",
@@ -134,6 +136,7 @@ const TAB_LABELS: Record<Tab, [string, string]> = {
   categories: ["الأقسام", "Categories"],
   orders: ["الطلبات", "Orders"],
   topups: ["طلبات الشحن", "Top-ups"],
+  bankverify: ["التحقق البنكي", "Bank verify"],
   users: ["المستخدمون", "Users"],
   reviews: ["التقييمات", "Reviews"],
   support: ["الدعم الفني", "Support"],
@@ -149,6 +152,7 @@ const TAB_ICONS: Record<Tab, React.ReactNode> = {
   categories: <FolderTree />,
   orders: <PackageCheck />,
   topups: <Wallet />,
+  bankverify: <ShieldCheck />,
   users: <Users />,
   reviews: <Star />,
   support: <LifeBuoy />,
@@ -305,6 +309,7 @@ function AdminPage() {
             {tab === "categories" && <CategoriesTab />}
             {tab === "orders" && <OrdersTab />}
             {tab === "topups" && <TopupsPanel />}
+            {tab === "bankverify" && <BankVerifyPanel />}
             {tab === "users" && <UsersPanel />}
             {tab === "reviews" && <ReviewsPanel />}
             {tab === "support" && <SupportPanel />}
