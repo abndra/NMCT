@@ -1,7 +1,7 @@
 /* All site imagery is hosted on the third image database (Cloudinary: lk3acghf).
    The NMCT background + logo live locally / on Lovable assets. */
 import bg from "@/assets/nmct-bg.jpg";
-import logoAsset from "@/assets/nmct-logo.png.asset.json";
+import logoImg from "@/assets/nmct-logo.png";
 import catEsim from "@/assets/cat-esim.jpg";
 import catApps from "@/assets/cat-apps.jpg";
 import pEsim3 from "@/assets/p-esim-3.jpg";
@@ -12,7 +12,7 @@ import pAccount from "@/assets/p-account.jpg";
 const CDN = "https://res.cloudinary.com/lk3acghf/image/upload";
 
 export const siteBackground = bg;
-export const siteLogo = logoAsset.url;
+export const siteLogo = logoImg;
 
 export const IMG = {
   logo: siteLogo,

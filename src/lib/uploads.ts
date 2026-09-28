@@ -1,94 +1,24 @@
-/* Cloudinary multi-account image hosting (3 databases, switchable). */
+/* Public, keyless image hosting. Existing image URLs remain valid. */
+export const IMAGE_HOST = {
+  id: "img402-public",
+  label: "الاستضافة العامة المجانية",
+  labelEn: "Free public image hosting",
+  hostname: "i.img402.dev",
+} as const;
 
-export type CloudAccount = {
-  id: string;
-  cloudName: string;
-  uploadPreset: string;
-  label: string;
-  labelEn: string;
-};
-
-export const CLOUD_ACCOUNTS = [
-  {
-    id: "ufrfxjfj",
-    cloudName: "ufrfxjfj",
-    uploadPreset: "vrstore",
-    label: "قاعدة الصور الأولى",
-    labelEn: "Image DB 1",
-  },
-  {
-    id: "pohzou4d",
-    cloudName: "pohzou4d",
-    uploadPreset: "vrstore2",
-    label: "قاعدة الصور الثانية",
-    labelEn: "Image DB 2",
-  },
-  {
-    id: "lk3acghf",
-    cloudName: "lk3acghf",
-    uploadPreset: "vrstore3",
-    label: "قاعدة الصور الثالثة",
-    labelEn: "Image DB 3",
-  },
-] as const satisfies readonly CloudAccount[];
-
-const DEFAULT_ACCOUNT: CloudAccount = CLOUD_ACCOUNTS[2];
-
-const ACTIVE_KEY = "gp_active_cloud";
-
-export function getActiveCloudId() {
-  try {
-    const id = localStorage.getItem(ACTIVE_KEY);
-    if (id && CLOUD_ACCOUNTS.some((a) => a.id === id)) return id;
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_ACCOUNT.id;
-}
-
-export function setActiveCloudId(id: string) {
-  if (!CLOUD_ACCOUNTS.some((a) => a.id === id)) return false;
-  try {
-    localStorage.setItem(ACTIVE_KEY, id);
-  } catch {
-    /* ignore */
-  }
-  return true;
-}
-
-export function getActiveCloud(): CloudAccount {
-  const id = getActiveCloudId();
-  return CLOUD_ACCOUNTS.find((a) => a.id === id) ?? DEFAULT_ACCOUNT;
-}
-
-import { uploadToCatbox } from "./catbox.functions";
-
-/** Primary: free unlimited public host (catbox.moe). Fallback: Cloudinary. */
 export async function uploadImage(file: File, folder = "nmct"): Promise<string> {
-  try {
-    const fd = new FormData();
-    fd.append("file", file);
-    const r = await uploadToCatbox({ data: fd });
-    if (r?.url) return r.url;
-  } catch {
-    /* fall back to Cloudinary */
-  }
-  return uploadCloudinary(file, folder);
-}
-
-async function uploadCloudinary(file: File, folder: string): Promise<string> {
-  const acc = getActiveCloud();
+  void folder;
   const form = new FormData();
   form.append("file", file);
-  form.append("upload_preset", acc.uploadPreset);
-  form.append("folder", folder);
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${acc.cloudName}/image/upload`, {
+  const res = await fetch("https://img402.dev/api/free", {
     method: "POST",
     body: form,
   });
-  const json = (await res.json()) as { secure_url?: string; error?: { message?: string } };
-  if (!json.secure_url) throw new Error(json.error?.message || "upload failed");
-  return json.secure_url;
+  const json = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
+  if (!res.ok || !json?.url || !/^https:\/\/i\.img402\.dev\//.test(json.url)) {
+    throw new Error(json?.error || `upload failed (${res.status})`);
+  }
+  return json.url;
 }
 
 /** Cloudinary auto format/quality for faster delivery. */
