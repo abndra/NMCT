@@ -61,7 +61,22 @@ export function getActiveCloud(): CloudAccount {
   return CLOUD_ACCOUNTS.find((a) => a.id === id) ?? DEFAULT_ACCOUNT;
 }
 
+import { uploadToCatbox } from "./catbox.functions";
+
+/** Primary: free unlimited public host (catbox.moe). Fallback: Cloudinary. */
 export async function uploadImage(file: File, folder = "nmct"): Promise<string> {
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await uploadToCatbox({ data: fd });
+    if (r?.url) return r.url;
+  } catch {
+    /* fall back to Cloudinary */
+  }
+  return uploadCloudinary(file, folder);
+}
+
+async function uploadCloudinary(file: File, folder: string): Promise<string> {
   const acc = getActiveCloud();
   const form = new FormData();
   form.append("file", file);

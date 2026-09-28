@@ -22,6 +22,8 @@ export const Route = createFileRoute("/")({
         property: "og:description",
         content: "شرائح eSIM وتطبيقات بلس وحسابات رقمية — تسليم فوري وأسعار تنافسية.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Index,
@@ -182,7 +184,7 @@ function Index() {
           />
           <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
             {mostWanted.map((p, i) => (
-              <ProductCard key={p.id} product={p} rank={i + 1} />
+               <ProductCard key={p.id} product={p} rank={i + 1} autoRotate />
             ))}
           </div>
         </section>
@@ -194,7 +196,7 @@ function Index() {
           <SectionHead title={t("dailyOffers")} />
           <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
             {deals.map((p) => (
-              <ProductCard key={p.id} product={p} />
+               <ProductCard key={p.id} product={p} autoRotate />
             ))}
           </div>
         </section>
@@ -206,7 +208,7 @@ function Index() {
           <SectionHead title={t("newArrivals")} />
           <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
             {newArrivals.map((p) => (
-              <ProductCard key={p.id} product={p} />
+               <ProductCard key={p.id} product={p} autoRotate />
             ))}
           </div>
           <div className="mt-8 text-center">
@@ -226,7 +228,7 @@ function Index() {
           <SectionHead title={lang === "ar" ? "المنتجات" : "Products"} />
           <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
             {others.map((p) => (
-              <ProductCard key={p.id} product={p} />
+               <ProductCard key={p.id} product={p} autoRotate />
             ))}
           </div>
           <div className="mt-8 text-center">

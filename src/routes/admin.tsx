@@ -107,6 +107,8 @@ export const Route = createFileRoute("/admin")({
       { name: "description", content: "لوحة تحكم NMCT لإدارة المنتجات والطلبات والعروض." },
       { property: "og:title", content: "لوحة التحكم | NMCT" },
       { property: "og:description", content: "إدارة منتجات وطلبات متجر NMCT." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { name: "robots", content: "noindex" },
     ],
   }),

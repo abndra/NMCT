@@ -18,6 +18,8 @@ export const Route = createFileRoute("/product/$id")({
       { name: "description", content: "تفاصيل المنتج، الصور، الأسعار والمقاسات في متجر NMCT." },
       { property: "og:title", content: "تفاصيل المنتج | NMCT" },
       { property: "og:description", content: "تفاصيل المنتج والأسعار في متجر NMCT." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: ProductPage,
@@ -132,14 +134,14 @@ function ProductPage() {
       </div>
 
       <section className="mx-auto max-w-6xl px-4 py-6 sm:py-10">
-        <div className="grid gap-6 md:grid-cols-2 md:gap-10">
-          <div className="space-y-3">
-            <div className="relative aspect-4/5 overflow-hidden rounded-3xl glass-panel">
+        <div className="grid min-w-0 gap-6 md:grid-cols-2 md:gap-10">
+          <div className="min-w-0 space-y-3">
+            <div className="relative h-[min(52svh,28rem)] w-full overflow-hidden rounded-2xl glass-panel sm:h-[min(60svh,34rem)] md:h-auto md:aspect-4/5 md:rounded-3xl">
               {gallery[active] ? (
                 <img
                   src={gallery[active]}
                   alt={name}
-                  className="block size-full object-cover object-center"
+                  className="block size-full object-contain object-center md:object-cover"
                 />
 
               ) : (
@@ -152,7 +154,7 @@ function ProductPage() {
               )}
             </div>
             {gallery.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
                 {gallery.map((g, i) => (
                   <button
                     key={g + i}
@@ -166,13 +168,13 @@ function ProductPage() {
             )}
           </div>
 
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5 overflow-hidden">
             {product.platform && (
               <span className="inline-block rounded-full border border-accent/50 px-3 py-1 font-tech text-xs uppercase text-accent">
                 {product.platform}
               </span>
             )}
-            <h1 className="font-display text-3xl leading-tight sm:text-4xl">{name}</h1>
+            <h1 className="wrap-break-word font-display text-2xl leading-tight sm:text-4xl">{name}</h1>
 
             <div className="flex flex-wrap items-center gap-3">
               <span className="font-display text-4xl text-primary">{fmt(unit)}</span>
@@ -191,7 +193,7 @@ function ProductPage() {
               )}
             </div>
 
-            {desc && <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{desc}</p>}
+            {desc && <p className="wrap-break-word whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{desc}</p>}
 
             {!!product.sizes?.length && (
               <div className="space-y-2">
