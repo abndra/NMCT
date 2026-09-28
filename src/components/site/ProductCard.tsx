@@ -1,5 +1,6 @@
 import { Heart, Plus, Flame } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { availableStock, isLowStock, isOutOfStock, type Product } from "@/lib/db";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
@@ -12,12 +13,28 @@ export function priceText(v: number, lang: "ar" | "en") {
   return lang === "ar" ? `${n} ر.ع` : `OMR ${n}`;
 }
 
-export function ProductCard({ product, rank }: { product: Product; rank?: number }) {
+export function ProductCard({
+  product,
+  rank,
+  autoRotate = false,
+}: {
+  product: Product;
+  rank?: number;
+  autoRotate?: boolean;
+}) {
   const { add, wishlist, toggleWish, qtyOf } = useCart();
   const { requireAuth } = useAuth();
   const { t, lang } = useI18n();
   const { fmt } = useCurrency();
-  const img = product.image || product.images?.[0];
+  const gallery = useMemo(
+    () =>
+      Array.from(
+        new Set([...(product.images ?? []), ...(product.image ? [product.image] : [])].filter(Boolean)),
+      ),
+    [product.image, product.images],
+  );
+  const [activeImage, setActiveImage] = useState(0);
+  const img = gallery[activeImage];
   const name = lang === "en" && product.nameEn ? product.nameEn : product.name;
   const off =
     product.oldPrice && product.oldPrice > product.price
@@ -30,6 +47,17 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
   const inCart = qtyOf(product.id);
   const full = !soldOut && inCart >= left;
 
+  useEffect(() => {
+    setActiveImage(0);
+    if (!autoRotate || gallery.length < 2) return;
+
+    const timer = window.setInterval(() => {
+      setActiveImage((current) => (current + 1) % gallery.length);
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [autoRotate, gallery.length, product.id]);
+
   return (
     <article className="group relative overflow-hidden rounded-2xl glass-panel neon-hover">
       <Link
@@ -41,10 +69,11 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
         <div className="relative aspect-4/5 overflow-hidden bg-secondary/50">
           {img ? (
             <img
+              key={`${product.id}-${activeImage}`}
               src={img}
               alt={name}
               loading="lazy"
-              className="block size-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
+              className="block size-full animate-fade-in object-cover object-center transition-transform duration-700 group-hover:scale-105 motion-reduce:animate-none motion-reduce:transition-none"
             />
 
           ) : (
@@ -53,6 +82,18 @@ export function ProductCard({ product, rank }: { product: Product; rank?: number
             </div>
           )}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-background/70 to-transparent" />
+          {autoRotate && gallery.length > 1 && (
+            <div className="absolute inset-x-3 bottom-3 z-10 flex justify-center gap-1" aria-hidden="true">
+              {gallery.map((_, index) => (
+                <span
+                  key={index}
+                  className={`h-1 rounded-full transition-all duration-500 ${
+                    index === activeImage ? "w-5 bg-primary" : "w-1.5 bg-foreground/35"
+                  }`}
+                />
+              ))}
+            </div>
+          )}
           {rank ? (
             <span className="absolute top-3 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 font-tech text-xs font-bold text-primary-foreground ltr:left-3 rtl:right-3">
               <Flame className="size-3" /> #{rank}

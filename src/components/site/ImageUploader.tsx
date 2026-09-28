@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import { ImagePlus, Link, Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { uploadImage, getActiveCloud } from "@/lib/uploads";
 import { useI18n } from "@/lib/i18n";
@@ -18,6 +18,7 @@ export function ImageUploader({
   const { lang } = useI18n();
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
+  const [urls, setUrls] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleFiles(files: FileList | null) {
@@ -38,6 +39,27 @@ export function ImageUploader({
     }
     onChange(next);
     setBusy(false);
+  }
+
+  function addPublicUrls() {
+    const candidates = urls
+      .split(/[\n,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const valid = candidates.filter((value) => {
+      try {
+        const parsed = new URL(value);
+        return parsed.protocol === "https:" || parsed.protocol === "http:";
+      } catch {
+        return false;
+      }
+    });
+    if (valid.length === 0) {
+      toast.error(lang === "ar" ? "أدخل رابط صورة عام صالح" : "Enter a valid public image URL");
+      return;
+    }
+    onChange(multiple ? Array.from(new Set([...images, ...valid])) : [valid[0] as string]);
+    setUrls("");
   }
 
   return (
@@ -81,6 +103,36 @@ export function ImageUploader({
             e.target.value = "";
           }}
         />
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <label className="relative min-w-0">
+          <Link className="absolute top-1/2 size-4 -translate-y-1/2 text-muted-foreground ltr:left-3 rtl:right-3" />
+          <input
+            value={urls}
+            onChange={(event) => setUrls(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addPublicUrls();
+              }
+            }}
+            placeholder={
+              lang === "ar"
+                ? "ألصق رابط صورة عامة (يمكن إضافة روابط بلا حد)"
+                : "Paste a public image URL (unlimited links)"
+            }
+            className="h-11 w-full rounded-xl border border-border bg-background px-10 text-sm outline-none transition-colors focus:border-primary"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={addPublicUrls}
+          className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-transform hover:scale-105"
+          aria-label={lang === "ar" ? "إضافة رابط الصورة" : "Add image URL"}
+        >
+          <Plus className="size-5" />
+        </button>
       </div>
 
       {images.length > 0 && (
