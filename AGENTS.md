@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Product media accepts unlimited public HTTP(S) image URLs alongside direct uploads, because image count must not be constrained by a single hosting account.
