@@ -9,4 +9,4 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- Product media accepts unlimited public HTTP(S) image URLs alongside direct uploads, because image count must not be constrained by a single hosting account.
+- Product and receipt uploads use img402's public keyless upload endpoint; existing hosted URLs remain untouched to avoid breaking catalog media.
