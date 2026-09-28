@@ -31,8 +31,6 @@ export const Route = createFileRoute("/orders")({
       { name: "description", content: "تابع حالة طلباتك في NMCT لحظة بلحظة." },
       { property: "og:title", content: "طلباتي | NMCT" },
       { property: "og:description", content: "تابع حالة طلباتك في NMCT لحظة بلحظة." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: OrdersPage,

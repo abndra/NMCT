@@ -1,12 +1,12 @@
 import { Heart, Plus, Flame } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
 import { availableStock, isLowStock, isOutOfStock, type Product } from "@/lib/db";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "@/lib/currency";
 import { toast } from "sonner";
+import { useEffect, useMemo, useState } from "react";
 
 export function priceText(v: number, lang: "ar" | "en") {
   const n = Number(v || 0).toFixed(2);
@@ -27,14 +27,19 @@ export function ProductCard({
   const { t, lang } = useI18n();
   const { fmt } = useCurrency();
   const gallery = useMemo(
-    () =>
-      Array.from(
-        new Set([...(product.images ?? []), ...(product.image ? [product.image] : [])].filter(Boolean)),
-      ),
+    () => Array.from(new Set([product.image, ...(product.images ?? [])].filter((item): item is string => Boolean(item)))),
     [product.image, product.images],
   );
   const [activeImage, setActiveImage] = useState(0);
-  const img = gallery[activeImage];
+  useEffect(() => {
+    setActiveImage(0);
+    if (!autoRotate || gallery.length < 2) return;
+    const timer = window.setInterval(
+      () => setActiveImage((current) => (current + 1) % gallery.length),
+      3000,
+    );
+    return () => window.clearInterval(timer);
+  }, [autoRotate, gallery]);
   const name = lang === "en" && product.nameEn ? product.nameEn : product.name;
   const off =
     product.oldPrice && product.oldPrice > product.price
@@ -47,17 +52,6 @@ export function ProductCard({
   const inCart = qtyOf(product.id);
   const full = !soldOut && inCart >= left;
 
-  useEffect(() => {
-    setActiveImage(0);
-    if (!autoRotate || gallery.length < 2) return;
-
-    const timer = window.setInterval(() => {
-      setActiveImage((current) => (current + 1) % gallery.length);
-    }, 3000);
-
-    return () => window.clearInterval(timer);
-  }, [autoRotate, gallery.length, product.id]);
-
   return (
     <article className="group relative overflow-hidden rounded-2xl glass-panel neon-hover">
       <Link
@@ -66,15 +60,20 @@ export function ProductCard({
         className="block w-full text-start"
         aria-label={name}
       >
-        <div className="relative aspect-4/5 overflow-hidden bg-secondary/50">
-          {img ? (
-            <img
-              key={`${product.id}-${activeImage}`}
-              src={img}
-              alt={name}
-              loading="lazy"
-              className="block size-full animate-fade-in object-cover object-center transition-transform duration-700 group-hover:scale-105 motion-reduce:animate-none motion-reduce:transition-none"
-            />
+        <div className="relative aspect-square max-w-full overflow-hidden bg-secondary/50 sm:aspect-4/5">
+          {gallery.length ? (
+            gallery.map((src, index) => (
+              <img
+                key={src}
+                src={src}
+                alt={index === activeImage ? name : ""}
+                aria-hidden={index !== activeImage}
+                loading="lazy"
+                className={`absolute inset-0 block size-full object-cover object-center transition-[opacity,transform] duration-700 ease-out group-hover:scale-105 ${
+                  index === activeImage ? "opacity-100" : "opacity-0"
+                }`}
+              />
+            ))
 
           ) : (
             <div className="grid size-full place-items-center font-display text-3xl text-muted-foreground">
@@ -83,12 +82,12 @@ export function ProductCard({
           )}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-background/70 to-transparent" />
           {autoRotate && gallery.length > 1 && (
-            <div className="absolute inset-x-3 bottom-3 z-10 flex justify-center gap-1" aria-hidden="true">
-              {gallery.map((_, index) => (
+            <div className="absolute inset-x-0 bottom-2 z-10 flex justify-center gap-1" aria-hidden="true">
+              {gallery.map((src, index) => (
                 <span
-                  key={index}
+                  key={src}
                   className={`h-1 rounded-full transition-all duration-500 ${
-                    index === activeImage ? "w-5 bg-primary" : "w-1.5 bg-foreground/35"
+                    index === activeImage ? "w-4 bg-primary" : "w-1 bg-foreground/45"
                   }`}
                 />
               ))}
@@ -118,15 +117,15 @@ export function ProductCard({
           )}
         </div>
 
-        <div className="space-y-1 p-4 pb-16">
-          <h3 className="line-clamp-2 font-display text-base leading-tight">{name}</h3>
+        <div className="min-w-0 space-y-1 p-3 pb-16 sm:p-4 sm:pb-16">
+          <h3 className="line-clamp-2 break-words font-display text-sm leading-snug sm:text-base">{name}</h3>
           {product.platform && (
             <p className="font-tech text-[11px] uppercase tracking-wider text-accent">
               {product.platform}
             </p>
           )}
           <div className="flex items-center gap-2 pt-1">
-            <span className="font-display text-lg text-primary">{fmt(product.price)}</span>
+            <span className="break-words font-display text-base text-primary sm:text-lg">{fmt(product.price)}</span>
             {off > 0 && (
               <span className="text-sm text-muted-foreground line-through">
                 {fmt(product.oldPrice as number)}
@@ -151,7 +150,7 @@ export function ProductCard({
         </div>
       </Link>
 
-      <div className="absolute inset-x-4 bottom-4 flex items-center gap-2">
+      <div className="absolute inset-x-3 bottom-3 flex items-center gap-2 sm:inset-x-4 sm:bottom-4">
         <button
           disabled={soldOut || full}
           onClick={() => {
@@ -172,7 +171,7 @@ export function ProductCard({
                 );
             });
           }}
-          className={`inline-flex h-10 flex-1 items-center justify-center gap-1 rounded-xl font-display text-sm transition-transform ${
+          className={`inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden rounded-xl px-1 font-display text-xs transition-transform sm:text-sm ${
             soldOut || full
               ? "cursor-not-allowed border border-border bg-muted text-muted-foreground"
               : "bg-primary text-primary-foreground hover:scale-[1.02]"

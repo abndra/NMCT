@@ -39,7 +39,7 @@ import { useI18n } from "@/lib/i18n";
 import { useCategories, useProducts, useSettings } from "@/hooks/use-store-data";
 import { priceText } from "@/components/site/ProductCard";
 import { ImageUploader } from "@/components/site/ImageUploader";
-import { CLOUD_ACCOUNTS, getActiveCloudId, setActiveCloudId } from "@/lib/uploads";
+import { IMAGE_HOST } from "@/lib/uploads";
 import { downloadWhatsappServerZip } from "@/lib/zip";
 
 import { useAuth, GoogleMark } from "@/lib/auth";
@@ -107,8 +107,6 @@ export const Route = createFileRoute("/admin")({
       { name: "description", content: "لوحة تحكم NMCT لإدارة المنتجات والطلبات والعروض." },
       { property: "og:title", content: "لوحة التحكم | NMCT" },
       { property: "og:description", content: "إدارة منتجات وطلبات متجر NMCT." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -1962,34 +1960,22 @@ function SettingsTab() {
 /* ---------------- clouds ---------------- */
 function CloudsTab() {
   const { lang } = useI18n();
-  const [active, setActive] = useState<string>("");
-  useEffect(() => setActive(getActiveCloudId()), []);
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      {CLOUD_ACCOUNTS.map((a) => {
-        const on = a.id === active;
-        return (
-          <div
-            key={a.id}
-            className={`rounded-2xl border p-5 ${on ? "border-primary bg-primary/10" : "border-border bg-card"}`}
-          >
-            <h3 className="font-display text-lg">{lang === "ar" ? a.label : a.labelEn}</h3>
-            <p className="mt-1 font-tech text-xs text-muted-foreground">{a.cloudName}</p>
-            <button
-              onClick={() => {
-                setActiveCloudId(a.id);
-                setActive(a.id);
-                toast.success(lang === "ar" ? "تم التفعيل" : "Activated");
-              }}
-              className={`mt-4 h-10 w-full rounded-xl font-display text-sm ${
-                on ? "bg-primary text-primary-foreground" : "border border-border"
-              }`}
-            >
-              {on ? (lang === "ar" ? "مفعّلة" : "Active") : lang === "ar" ? "تفعيل" : "Activate"}
-            </button>
-          </div>
-        );
-      })}
+    <div className="max-w-xl rounded-2xl border border-primary bg-primary/10 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-lg">{lang === "ar" ? IMAGE_HOST.label : IMAGE_HOST.labelEn}</h3>
+          <p className="mt-1 font-tech text-xs text-muted-foreground">{IMAGE_HOST.hostname}</p>
+        </div>
+        <span className="rounded-full bg-primary px-3 py-1 font-display text-xs text-primary-foreground">
+          {lang === "ar" ? "مفعّلة" : "Active"}
+        </span>
+      </div>
+      <p className="mt-4 text-sm text-muted-foreground">
+        {lang === "ar"
+          ? "رفع عام مجاني بلا حساب أو مفاتيح. الصور الحالية ستبقى تعمل كما هي."
+          : "Free public uploads without accounts or keys. Existing images remain unchanged."}
+      </p>
     </div>
   );
 }

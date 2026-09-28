@@ -24,8 +24,6 @@ export const Route = createFileRoute("/store")({
       },
       { property: "og:title", content: "المتجر | NMCT" },
       { property: "og:description", content: "كل ألعاب وأقراص وبطاقات NMCT في مكان واحد." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: StorePage,
