@@ -174,10 +174,41 @@ async function allocate(order) {
 const json = (status, body) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
+/**
+ * خدمة التسليم الاحتياطية (تملك صلاحية قاعدة البيانات مسبقاً).
+ * تُستخدم تلقائياً إذا لم يُضبط FIREBASE_DB_SECRET في Netlify — فلا يحتاج صاحب المتجر أي إعداد.
+ */
+const RELAY_URLS = [
+  "https://project--fe83eda9-3e7e-4a2b-9893-dd6db1ace544.lovable.app/api/public/deliver",
+  "https://project--fe83eda9-3e7e-4a2b-9893-dd6db1ace544-dev.lovable.app/api/public/deliver",
+];
+
+async function relay(payload) {
+  let last = json(502, { error: "relay-failed" });
+  for (const url of RELAY_URLS) {
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const text = await r.text();
+      let body;
+      try { body = JSON.parse(text); } catch { continue; } // صفحة HTML = الرابط غير منشور
+      last = json(r.status, body);
+      if (r.ok || [401, 402, 403, 404, 409].includes(r.status) || body.error === "needs-manual-approval") return last;
+    } catch {
+      /* جرّب الرابط التالي */
+    }
+  }
+  return last;
+}
+
 export default async (req) => {
   if (req.method !== "POST") return json(405, { error: "method" });
-  if (!DB_SECRET) return json(501, { error: "delivery-not-configured", detail: "FIREBASE_DB_SECRET not set" });
-  const { idToken, orderId } = await req.json().catch(() => ({}));
+  const payload = await req.json().catch(() => ({}));
+  if (!DB_SECRET) return relay(payload);
+  const { idToken, orderId } = payload;
   if (!idToken || !orderId || !/^[A-Za-z0-9_-]{1,64}$/.test(String(orderId)))
     return json(400, { error: "idToken and orderId required" });
   const uid = await verifyIdToken(String(idToken));
