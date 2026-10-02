@@ -53,6 +53,8 @@ import {
   updateCategory,
   deleteCategory,
   onOrdersChange,
+  fulfillOrderWithReport,
+  updateOrderStatus,
   acceptOrder,
   rejectOrder,
   deleteOrder,
@@ -212,6 +214,26 @@ function AdminPage() {
   // Auto-rewrite legacy Cloudinary links to ImgBB once the admin session is confirmed.
   useEffect(() => {
     if (allowed === true) void migrateImageLinks();
+  }, [allowed]);
+
+  // Backup auto-delivery: while any admin tab is open, paid wallet orders that
+  // are still pending are delivered from stock automatically (no click needed).
+  useEffect(() => {
+    if (allowed !== true) return;
+    const busy = new Set<string>();
+    return onOrdersChange((list) => {
+      for (const o of list) {
+        const pending = !o.status || o.status === "pending";
+        const done = Array.isArray(o.deliveredCodes) && o.deliveredCodes.length > 0;
+        const rec = o as Order & { paid?: boolean; needsApproval?: boolean; rejected?: boolean };
+        if (!pending || done || busy.has(o.id)) continue;
+        if (!o.paidFromWallet || rec.paid !== true || rec.needsApproval || rec.rejected) continue;
+        busy.add(o.id);
+        void fulfillOrderWithReport(o.id)
+          .then((r) => (r.missing.length ? undefined : updateOrderStatus(o.id, "delivered")))
+          .catch(() => busy.delete(o.id));
+      }
+    });
   }, [allowed]);
 
   if (!user || allowed !== true)

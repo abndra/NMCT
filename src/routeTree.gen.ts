@@ -18,6 +18,7 @@ import { Route as SupportRouteImport } from './routes/support'
 import { Route as TopupRouteImport } from './routes/topup'
 import { Route as WalletRouteImport } from './routes/wallet'
 import { Route as ProductIdRouteImport } from './routes/product.$id'
+import { Route as ApiPublicDeliverRouteImport } from './routes/api/public/deliver'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -64,6 +65,11 @@ const ProductIdRoute = ProductIdRouteImport.update({
   path: '/product/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicDeliverRoute = ApiPublicDeliverRouteImport.update({
+  id: '/api/public/deliver',
+  path: '/api/public/deliver',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/topup': typeof TopupRoute
   '/wallet': typeof WalletRoute
   '/product/$id': typeof ProductIdRoute
+  '/api/public/deliver': typeof ApiPublicDeliverRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -86,6 +93,7 @@ export interface FileRoutesByTo {
   '/topup': typeof TopupRoute
   '/wallet': typeof WalletRoute
   '/product/$id': typeof ProductIdRoute
+  '/api/public/deliver': typeof ApiPublicDeliverRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -98,6 +106,7 @@ export interface FileRoutesById {
   '/topup': typeof TopupRoute
   '/wallet': typeof WalletRoute
   '/product/$id': typeof ProductIdRoute
+  '/api/public/deliver': typeof ApiPublicDeliverRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -111,6 +120,7 @@ export interface FileRouteTypes {
     | '/topup'
     | '/wallet'
     | '/product/$id'
+    | '/api/public/deliver'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -122,6 +132,7 @@ export interface FileRouteTypes {
     | '/topup'
     | '/wallet'
     | '/product/$id'
+    | '/api/public/deliver'
   id:
     | '__root__'
     | '/'
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | '/topup'
     | '/wallet'
     | '/product/$id'
+    | '/api/public/deliver'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -145,6 +157,7 @@ export interface RootRouteChildren {
   TopupRoute: typeof TopupRoute
   WalletRoute: typeof WalletRoute
   ProductIdRoute: typeof ProductIdRoute
+  ApiPublicDeliverRoute: typeof ApiPublicDeliverRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -212,6 +225,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/deliver': {
+      id: '/api/public/deliver'
+      path: '/api/public/deliver'
+      fullPath: '/api/public/deliver'
+      preLoaderRoute: typeof ApiPublicDeliverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -225,6 +245,7 @@ const rootRouteChildren: RootRouteChildren = {
   TopupRoute: TopupRoute,
   WalletRoute: WalletRoute,
   ProductIdRoute: ProductIdRoute,
+  ApiPublicDeliverRoute: ApiPublicDeliverRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
