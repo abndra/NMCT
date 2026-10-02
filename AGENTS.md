@@ -13,3 +13,4 @@
 
 - Image uploads go to ImgBB via `src/lib/uploads.ts`; old Cloudinary URLs are mapped in `src/lib/image-map.ts` so legacy data keeps rendering.
 - Wallet-order auto-delivery runs as a Netlify Function (`netlify/functions/deliver.mjs`, path `/api/deliver`) with the WhatsApp server only as fallback — avoids manual admin approval when the external server is down.
+- Wallet-order auto-delivery has a site server route (/api/public/deliver, FIREBASE_DB_SECRET) tried before Netlify /api/deliver and the WhatsApp server; admin panel also auto-delivers pending paid wallet orders as a backup — buyers must never wait for manual approval.
