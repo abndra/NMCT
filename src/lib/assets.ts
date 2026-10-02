@@ -9,6 +9,7 @@ import pEsim30 from "@/assets/p-esim-30.jpg";
 import pIosPlus from "@/assets/p-ios-plus.jpg";
 import pAccount from "@/assets/p-account.jpg";
 
+import { migrateUrl } from "./image-map";
 const CDN = "https://res.cloudinary.com/lk3acghf/image/upload";
 
 export const siteBackground = bg;
@@ -58,7 +59,7 @@ const byFilename: Record<string, string> = {
 /** Maps legacy CDN pointer URLs from the previous project to the current hosted images. */
 export function resolveImage(url?: string): string | undefined {
   if (!url) return url;
-  if (!url.startsWith("/__l5e/")) return url;
+  if (!url.startsWith("/__l5e/")) return migrateUrl(url);
   const filename = url.split("/").pop() ?? "";
   return byFilename[filename] ?? url;
 }
