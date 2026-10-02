@@ -209,6 +209,11 @@ function AdminPage() {
     };
   }, [user]);
 
+  // Auto-rewrite legacy Cloudinary links to ImgBB once the admin session is confirmed.
+  useEffect(() => {
+    if (allowed === true) void migrateImageLinks();
+  }, [allowed]);
+
   if (!user || allowed !== true)
     return (
       <Layout>
@@ -1958,8 +1963,42 @@ function SettingsTab() {
 }
 
 /* ---------------- clouds ---------------- */
+async function migrateImageLinks(): Promise<number> {
+  const { migrateDeep } = await import("@/lib/image-map");
+  const { getDb } = await import("@/lib/firebase");
+  const { ref, get, set } = await import("firebase/database");
+  let changed = 0;
+  for (const path of ["products", "categories", "settings", "announcements", "reviews", "stock", "orders", "topups", "support"]) {
+    try {
+      const snap = await get(ref(getDb(), path));
+      if (!snap.exists()) continue;
+      const before = JSON.stringify(snap.val());
+      if (!before.includes("res.cloudinary.com")) continue;
+      const next = migrateDeep(snap.val());
+      if (JSON.stringify(next) !== before) {
+        await set(ref(getDb(), path), next);
+        changed++;
+      }
+    } catch (e) {
+      console.warn("[migrate]", path, e);
+    }
+  }
+  return changed;
+}
+
 function CloudsTab() {
   const { lang } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState("");
+  async function migrateAll() {
+    setBusy(true);
+    try {
+      const changed = await migrateImageLinks();
+      setDone(lang === "ar" ? `تم نقل الروابط في ${changed} قسم ✅` : `Updated links in ${changed} sections ✅`);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="max-w-xl rounded-2xl border border-primary bg-primary/10 p-5">
       <div className="flex items-center justify-between gap-3">
@@ -1973,9 +2012,19 @@ function CloudsTab() {
       </div>
       <p className="mt-4 text-sm text-muted-foreground">
         {lang === "ar"
-          ? "رفع عام مجاني بلا حساب أو مفاتيح. الصور الحالية ستبقى تعمل كما هي."
-          : "Free public uploads without accounts or keys. Existing images remain unchanged."}
+          ? "كل الصور الجديدة وإيصالات التحويل تُرفع إلى ImgBB. جميع صور المنتجات القديمة نُسخت إلى ImgBB وتظهر منه تلقائياً."
+          : "All new images and transfer receipts upload to ImgBB. Old product images were copied to ImgBB and are served from it."}
       </p>
+      <button
+        onClick={migrateAll}
+        disabled={busy}
+        className="mt-4 inline-flex h-11 items-center rounded-xl bg-primary px-4 font-display text-sm text-primary-foreground disabled:opacity-60"
+      >
+        {busy
+          ? lang === "ar" ? "جاري النقل..." : "Migrating..."
+          : lang === "ar" ? "تحويل كل روابط قاعدة البيانات إلى ImgBB" : "Rewrite all database links to ImgBB"}
+      </button>
+      {done && <p className="mt-2 text-sm text-primary">{done}</p>}
     </div>
   );
 }
