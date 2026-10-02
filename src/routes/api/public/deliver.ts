@@ -168,8 +168,14 @@ async function allocate(order) {
 }
 
 
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Max-Age": "86400",
+};
 const json = (status, body) =>
-  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...CORS } });
 
 async function handle(req: Request): Promise<Response> {
   if (req.method !== "POST") return json(405, { error: "method" });
@@ -220,5 +226,17 @@ async function handle(req: Request): Promise<Response> {
 
 
 export const Route = createFileRoute("/api/public/deliver")({
-  server: { handlers: { POST: async ({ request }) => handle(request) } },
+  server: {
+    handlers: {
+      OPTIONS: async () => new Response(null, { status: 204, headers: CORS }),
+      POST: async ({ request }) => {
+        try {
+          return await handle(request);
+        } catch (e) {
+          console.error("[deliver]", e);
+          return json(500, { error: "server-error" });
+        }
+      },
+    },
+  },
 });

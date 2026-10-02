@@ -40,7 +40,6 @@ import { useCategories, useProducts, useSettings } from "@/hooks/use-store-data"
 import { priceText } from "@/components/site/ProductCard";
 import { ImageUploader } from "@/components/site/ImageUploader";
 import { IMAGE_HOST } from "@/lib/uploads";
-import { downloadWhatsappServerZip } from "@/lib/zip";
 
 import { useAuth, GoogleMark } from "@/lib/auth";
 import {
@@ -70,8 +69,6 @@ import {
   ensurePaymentMethods,
   type PaymentMethod,
 
-  waServerStatus,
-  waServerControl,
   sendWhatsAppTest,
   DEFAULT_COUNTRY_CODE,
   normalizeWaServerUrl,
@@ -1663,23 +1660,7 @@ function SettingsTab() {
   const [waToken, setWaToken] = useState("");
   const [waState, setWaState] = useState("");
 
-  async function waControl(action: "restart" | "logout") {
-    setWaState("...");
-    try {
-      await waServerControl({ url: waUrl.trim(), token: waToken.trim() }, action);
-      setWaState(
-        action === "restart"
-          ? lang === "ar"
-            ? "تمت إعادة التشغيل ✅"
-            : "Restarted ✅"
-          : lang === "ar"
-            ? "تم تسجيل الخروج، افتح صفحة QR ✅"
-            : "Logged out, open the QR page ✅",
-      );
-    } catch {
-      setWaState(lang === "ar" ? "تعذر تنفيذ الأمر ❌" : "Command failed ❌");
-    }
-  }
+
 
 
   useEffect(() => {
@@ -1761,23 +1742,14 @@ function SettingsTab() {
             <Bell className="size-4" />
           </span>
           <h2 className="font-display text-lg">
-            {lang === "ar" ? "إشعارات الطلبات على واتساب" : "Order notifications (WhatsApp)"}
+            {lang === "ar" ? "إشعارات الطلبات" : "Order notifications"}
           </h2>
         </div>
         <p className="text-xs text-muted-foreground">
           {lang === "ar"
-            ? "أدخل رقم الواتساب الذي تريد استقبال الطلبات الجديدة عليه (مع رمز الدولة، مثال: 96897329207)."
-            : "WhatsApp number that receives new orders (with country code)."}
+            ? "إشعارات الطلبات الجديدة تصلك على الإيميل. التسليم للعملاء يتم تلقائياً داخل الموقع."
+            : "New-order alerts arrive by email. Customers receive their items inside the site."}
         </p>
-        <Labeled label={lang === "ar" ? "رقم الواتساب للإشعارات" : "Notification number"}>
-          <input
-            className={inputCls}
-            dir="ltr"
-            placeholder="96897329207"
-            value={notify}
-            onChange={(e) => setNotify(e.target.value)}
-          />
-        </Labeled>
         <Labeled label={lang === "ar" ? "رمز الدولة الافتراضي" : "Default country code"}>
           <input
             className={inputCls}
@@ -1789,7 +1761,6 @@ function SettingsTab() {
         </Labeled>
         <button
           onClick={async () => {
-            await updateSettings("notifyWhatsapp", notify.replace(/\D/g, ""));
             await updateSettings("countryCode", cc.replace(/\D/g, "") || DEFAULT_COUNTRY_CODE);
             toast.success(lang === "ar" ? "تم الحفظ" : "Saved");
           }}
@@ -1820,165 +1791,6 @@ function SettingsTab() {
         </div>
       </div>
 
-      <div className={cardCls}>
-        <div className="flex items-center gap-2">
-          <span className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
-            <Server className="size-4" />
-          </span>
-          <h2 className="font-display text-lg">
-            {lang === "ar" ? "سيرفر الواتساب (Railway)" : "WhatsApp server (Railway)"}
-          </h2>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {lang === "ar"
-            ? "عند ضبط رابط السيرفر والتوكن تُرسل كل الرسائل تلقائياً: تنبيه لك بكل طلب جديد، رسالة شكر للعميل، وتسليم المحتوى الرقمي عند قبول الطلب."
-            : "When configured, the bot sends everything automatically: new-order alerts, customer thank-you, and digital delivery on acceptance."}
-        </p>
-
-        <Labeled label={lang === "ar" ? "رابط السيرفر" : "Server URL"}>
-          <input
-            className={inputCls}
-            dir="ltr"
-            placeholder="https://my-bot.up.railway.app"
-            value={waUrl}
-            onChange={(e) => setWaUrl(e.target.value)}
-          />
-        </Labeled>
-        <Labeled label={lang === "ar" ? "التوكن (Bearer)" : "Token (Bearer)"}>
-          <input
-            className={inputCls}
-            dir="ltr"
-            value={waToken}
-            onChange={(e) => setWaToken(e.target.value)}
-          />
-        </Labeled>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={async () => {
-              await updateSettings("whatsappServer", { url: waUrl.trim(), token: waToken.trim() });
-              toast.success(lang === "ar" ? "تم الحفظ" : "Saved");
-            }}
-            className="h-12 flex-1 rounded-xl bg-primary font-display text-primary-foreground"
-          >
-            {lang === "ar" ? "حفظ" : "Save"}
-          </button>
-          <button
-            onClick={async () => {
-              setWaState("...");
-              try {
-                const st = await waServerStatus({ url: waUrl.trim(), token: waToken.trim() });
-                const tokenBad =
-                  st.tokenOk === false
-                    ? lang === "ar"
-                      ? " — ⚠️ التوكن غير مطابق للسيرفر، لن تُرسل أي رسالة"
-                      : " — ⚠️ token mismatch, messages will fail"
-                    : "";
-                const delivery = st.autoDelivery
-                  ? lang === "ar"
-                    ? " — التسليم الفوري مُفعّل ⚡"
-                    : " — instant delivery ON ⚡"
-                  : lang === "ar"
-                    ? " — التسليم الفوري غير مُفعّل (أضف FIREBASE_DB_SECRET في متغيرات Railway)"
-                    : " — instant delivery OFF (set FIREBASE_DB_SECRET on Railway)";
-                setWaState(
-                  (st.connected
-                    ? lang === "ar"
-                      ? "متصل ✅"
-                      : "Connected ✅"
-                    : String(st.status || (lang === "ar" ? "غير متصل" : "Disconnected"))) +
-                    tokenBad +
-                    delivery,
-                );
-              } catch {
-                setWaState(lang === "ar" ? "تعذر الوصول للسيرفر ❌" : "Unreachable ❌");
-              }
-            }}
-            className="h-12 rounded-xl border border-border px-5 font-display text-sm"
-          >
-            {lang === "ar" ? "فحص الحالة" : "Check status"}
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <a
-            href={waUrl ? normalizeWaServerUrl(waUrl) + "/qr" : "#"}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-11 items-center rounded-xl border border-accent px-4 font-display text-sm text-accent"
-          >
-            {lang === "ar" ? "ربط واتساب (QR)" : "Link WhatsApp (QR)"}
-          </a>
-          <button
-            onClick={() => void waControl("restart")}
-            className="h-11 rounded-xl border border-border px-4 font-display text-sm"
-          >
-            {lang === "ar" ? "إعادة تشغيل" : "Restart"}
-          </button>
-          <button
-            onClick={() => {
-              if (
-                window.confirm(
-                  lang === "ar"
-                    ? "تسجيل خروج الجلسة؟ ستحتاج لمسح QR من جديد."
-                    : "Log out the session? You'll need to scan a new QR.",
-                )
-              )
-                void waControl("logout");
-            }}
-            className="h-11 rounded-xl border border-destructive px-4 font-display text-sm text-destructive"
-          >
-            {lang === "ar" ? "تسجيل خروج الجلسة" : "Log out session"}
-          </button>
-        </div>
-        <button
-          onClick={async () => {
-            const to = notify.replace(/\D/g, "");
-            if (!to) {
-              toast.error(lang === "ar" ? "أدخل رقم الإشعارات أولاً" : "Set the notification number first");
-              return;
-            }
-            setWaState("...");
-            const r = await sendWhatsAppTest({ url: waUrl.trim(), token: waToken.trim() }, to);
-            setWaState(
-              r.ok
-                ? lang === "ar"
-                  ? "تم إرسال رسالة تجريبية ✅"
-                  : "Test message sent ✅"
-                : (lang === "ar" ? "فشل الإرسال: " : "Send failed: ") + (r.error || ""),
-            );
-            if (r.ok) toast.success(lang === "ar" ? "تم الإرسال" : "Sent");
-            else toast.error(r.error || "");
-          }}
-          className="h-11 w-full rounded-xl border border-primary px-4 font-display text-sm text-primary"
-        >
-          {lang === "ar" ? "إرسال رسالة تجريبية" : "Send test message"}
-        </button>
-        {waState && <p className="text-sm text-primary">{waState}</p>}
-
-        <div className="rounded-xl border border-border p-4">
-          <p className="font-display text-sm">
-            {lang === "ar" ? "ملفات السيرفر (للنشر على GitHub)" : "Server files (to publish on GitHub)"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {lang === "ar"
-              ? "حمّل الملفات كملف ZIP (index.js, package.json, README.md, railway.json, Procfile, .gitignore) ثم ارفعها كما هي لمستودع GitHub وانشرها على Railway."
-              : "Download the files as a ZIP, push them to a GitHub repo, then deploy on Railway."}
-          </p>
-          <button
-            onClick={async () => {
-              try {
-                await downloadWhatsappServerZip();
-                toast.success(lang === "ar" ? "تم التحميل" : "Downloaded");
-              } catch {
-                toast.error(lang === "ar" ? "تعذر تحميل الملفات" : "Download failed");
-              }
-            }}
-            className="mt-3 inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-5 font-display text-sm text-accent-foreground"
-          >
-            <Download className="size-4" />
-            {lang === "ar" ? "تحميل ملفات السيرفر (ZIP)" : "Download server files (ZIP)"}
-          </button>
-        </div>
-      </div>
 
     </div>
   );

@@ -104,6 +104,25 @@ function OrdersPage() {
     return () => unsub();
   }, [device, ids, user?.uid]);
 
+  // حماية ذاتية: أي طلب مدفوع من الرصيد ولم يُسلَّم بعد يُسلَّم تلقائياً عند فتح الصفحة.
+  useEffect(() => {
+    if (!user?.uid) return;
+    const stuck = orders.filter(
+      (o) =>
+        o.uid === user.uid &&
+        o.paidFromWallet &&
+        (o as Order & { paid?: boolean }).paid === true &&
+        o.status === "pending" &&
+        !o.needsApproval &&
+        !o.rejected &&
+        !(Array.isArray(o.deliveredCodes) && o.deliveredCodes.length),
+    );
+    if (!stuck.length) return;
+    void import("@/lib/delivery").then(({ requestInstantDelivery }) => {
+      for (const o of stuck) void requestInstantDelivery(o.id);
+    });
+  }, [orders, user?.uid]);
+
   const previous = useMemo(
     () => orders.filter((o) => o.status === "delivered" || o.status === "rejected"),
     [orders],
