@@ -10,8 +10,8 @@
 
 | الحقل | القيمة |
 |---|---|
-| Service ID | `service_tesvz7c` (Gmail) |
-| Public Key | `RtCOXQMy0AbQ0-VZ6` |
+| Service ID | `service_wwwomm8` (Gmail) |
+| Public Key | `E6JBoTJPCV_7ux4ZC` |
 | Private Key | لا يوضع في المتصفح إطلاقاً — اتركه في لوحة EmailJS فقط |
 | قالب الطلبات | `nmct_new_order` |
 | قالب شحن الرصيد | `nmct_new_topup` |

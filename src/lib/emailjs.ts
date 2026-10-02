@@ -12,8 +12,8 @@ import type { Order, OrderItem } from "./db";
 import type { TopupRequest } from "./wallet";
 
 export const EMAILJS = {
-  SERVICE_ID: "service_tesvz7c",
-  PUBLIC_KEY: "RtCOXQMy0AbQ0-VZ6",
+  SERVICE_ID: "service_wwwomm8",
+  PUBLIC_KEY: "E6JBoTJPCV_7ux4ZC",
   /** القالب الذي يصل للأدمن عند كل طلب جديد */
   TEMPLATE_NEW_ORDER: "nmct_new_order",
   /** القالب الذي يصل للأدمن عند كل طلب شحن رصيد */
