@@ -1,19 +1,17 @@
 /**
- * التسليم الفوري للطلبات المدفوعة من الرصيد.
- * ------------------------------------------
+ * التسليم الفوري للطلبات المدفوعة من الرصيد — داخل الموقع فقط (بدون واتساب).
+ * ---------------------------------------------------------------------------
  * قواعد Firebase تمنع المتصفح من قراءة المخزون (لحماية الأكواد)، لذلك يتم
- * السحب من المخزون على سيرفر الواتساب (Firebase Admin) عبر المسار /deliver.
- * السيرفر يتحقق من هوية المشتري (ID token) ومن أن الطلب مدفوع من الرصيد.
+ * السحب من المخزون عبر خدمة تسليم على الخادم تتحقق من:
+ *   - هوية المشتري (ID token)
+ *   - أن الطلب مدفوع من الرصيد وأن المبلغ خُصم فعلاً (wallet_tx)
+ * ثم تضع الأكواد داخل الطلب نفسه فتظهر للعميل في صفحة "تتبّع طلباتك".
  *
- * إن لم يكن السيرفر مضبوطاً يرجع { ok: false } ويبقى الطلب في لوحة التحكم
- * ليُسلَّم بضغطة قبول واحدة كما كان — لا يتأثر العميل ولا رصيده.
+ * ترتيب المحاولة: نفس الموقع (/api/deliver ثم /api/public/deliver) ثم خدمة
+ * التسليم المستضافة الاحتياطية. تُعاد المحاولة عدة مرات قبل الاستسلام.
  */
 import { getFbAuth } from "./firebase";
-import {
-  getWaServer,
-  normalizeWaServerUrl,
-  type DeliveredCode,
-} from "./db";
+import type { DeliveredCode } from "./db";
 
 export type InstantDeliveryResult =
   | { ok: true; codes: DeliveredCode[]; missing?: { productName: string; qty: number }[] }
@@ -26,57 +24,78 @@ type DeliverBody = {
   error?: string;
 };
 
-async function callDeliver(url: string, headers: Record<string, string>, idToken: string, orderId: string) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify({ idToken, orderId }),
-  });
-  const body = (await res.json().catch(() => ({}))) as DeliverBody;
-  return { res, body };
+const HOSTED_ENDPOINTS = [
+  "https://project--fe83eda9-3e7e-4a2b-9893-dd6db1ace544.lovable.app/api/public/deliver",
+  "https://project--fe83eda9-3e7e-4a2b-9893-dd6db1ace544-dev.lovable.app/api/public/deliver",
+];
+
+/** أخطاء نهائية — لا فائدة من إعادة المحاولة أو تجربة رابط آخر. */
+const FINAL = new Set([
+  "out-of-stock",
+  "needs-manual-approval",
+  "order-rejected",
+  "not-your-order",
+  "order-not-paid-from-wallet",
+]);
+
+async function callDeliver(url: string, idToken: string, orderId: string) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken, orderId }),
+      signal: ctrl.signal,
+    });
+    const body = (await res.json().catch(() => ({}))) as DeliverBody;
+    return { res, body };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-/**
- * 1) يحاول التسليم عبر دالة Netlify على نفس الموقع (/api/deliver) — لا تحتاج سيرفر خارجي.
- * 2) إن لم تكن مضبوطة يرجع لسيرفر الواتساب القديم.
- * 3) يعيد المحاولة حتى 3 مرات قبل الاستسلام.
- */
-export async function requestInstantDelivery(orderId: string): Promise<InstantDeliveryResult> {
+const inflight = new Map<string, Promise<InstantDeliveryResult>>();
+
+export function requestInstantDelivery(orderId: string): Promise<InstantDeliveryResult> {
+  const running = inflight.get(orderId);
+  if (running) return running;
+  const p = run(orderId).finally(() => inflight.delete(orderId));
+  inflight.set(orderId, p);
+  return p;
+}
+
+async function run(orderId: string): Promise<InstantDeliveryResult> {
   const user = getFbAuth().currentUser;
   if (!user) return { ok: false, error: "no-user" };
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const endpoints = [
+    ...(origin ? [origin + "/api/deliver", origin + "/api/public/deliver"] : []),
+    ...HOSTED_ENDPOINTS,
+  ];
   let last: InstantDeliveryResult = { ok: false, error: "unknown" };
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let idToken = "";
     try {
-      const idToken = await user.getIdToken();
-      // ① خدمة التسليم على نفس الموقع (Lovable أو Netlify)
-      for (const path of ["/api/public/deliver", "/api/deliver"]) {
+      idToken = await user.getIdToken(attempt > 0);
+    } catch (e) {
+      last = { ok: false, error: e instanceof Error ? e.message : "token" };
+    }
+    if (idToken) {
+      for (const url of endpoints) {
         try {
-          const { res, body } = await callDeliver(path, {}, idToken, orderId);
-          if (res.ok && body.ok) return { ok: true, codes: body.codes || [], missing: body.missing || [] };
-          if (body.error === "out-of-stock" || body.error === "needs-manual-approval")
+          const { res, body } = await callDeliver(url, idToken, orderId);
+          if (res.ok && body.ok)
+            return { ok: true, codes: body.codes || [], missing: body.missing || [] };
+          if (body.error && FINAL.has(body.error))
             return { ok: false, error: "HTTP " + res.status, reason: body.error };
           last = { ok: false, error: "HTTP " + res.status, reason: body.error || "" };
         } catch (e) {
           last = { ok: false, error: e instanceof Error ? e.message : "fetch" };
         }
       }
-      // ② السيرفر الخارجي (احتياطي)
-      const srv = await getWaServer();
-      if (srv?.url && srv.token) {
-        const { res, body } = await callDeliver(
-          normalizeWaServerUrl(srv.url) + "/deliver",
-          { Authorization: "Bearer " + srv.token },
-          idToken,
-          orderId,
-        );
-        if (res.ok && body.ok) return { ok: true, codes: body.codes || [], missing: body.missing || [] };
-        if (body.error === "out-of-stock") return { ok: false, error: "HTTP 409", reason: body.error };
-        last = { ok: false, error: "HTTP " + res.status, reason: body.error || "" };
-      }
-    } catch (e) {
-      last = { ok: false, error: e instanceof Error ? e.message : "خطأ" };
     }
-    await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+    await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
   }
   return last;
 }
@@ -85,9 +104,9 @@ export async function requestInstantDelivery(orderId: string): Promise<InstantDe
 export function instantDeliveryHint(r: Extract<InstantDeliveryResult, { ok: false }>, lang: string) {
   if (r.reason === "out-of-stock")
     return lang === "ar"
-      ? "المخزون نفد — سيتم التسليم يدوياً بأسرع وقت."
-      : "Out of stock — we will deliver manually shortly.";
+      ? "المخزون نفد — سيتم التسليم بأسرع وقت."
+      : "Out of stock — we will deliver shortly.";
   return lang === "ar"
-    ? "تم استلام طلبك ودفعه من رصيدك — سيتم التسليم بعد لحظات."
-    : "Order paid from your balance — delivery in a moment.";
+    ? "تم استلام طلبك ودفعه من رصيدك — سيظهر المحتوى في صفحة طلباتك خلال لحظات."
+    : "Order paid from your balance — your items will appear on your orders page in a moment.";
 }

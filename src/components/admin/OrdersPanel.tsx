@@ -63,7 +63,7 @@ function waLink(phone: string | undefined, text: string) {
   return `https://wa.me/${waNumber(phone)}?text=${encodeURIComponent(text)}`;
 }
 
-/** Hands one stock unit per purchased piece to the buyer, inside the site + WhatsApp. */
+/** Hands one stock unit per purchased piece to the buyer, inside the site. */
 async function markReceived(o: Order) {
   const { codes, missing } = await deliverOrder(o.id);
   if (missing.length) {
@@ -78,9 +78,7 @@ async function markReceived(o: Order) {
     toast.message("لم يتم تسليم أي محتوى رقمي لهذا الطلب.");
     return;
   }
-  const r = await notifyOrderDelivered(o, codes);
-  if (r.ok) toast.success("تم إرسال المحتوى الفعلي للعميل على واتساب ✅");
-  else toast.error("لم تُرسل رسالة الواتساب: " + (r.error || ""));
+  toast.success("تم التسليم — المحتوى ظاهر للعميل في صفحة طلباته ✅");
 }
 
 
@@ -320,13 +318,8 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
     setBusy(true);
     try {
       const codes = await deliverOrderManual(o.id, body);
-      const r = await notifyOrderDelivered({ ...o, deliveredCodes: codes }, codes);
-      if (r.ok) toast.success(lang === "ar" ? "تم التسليم وإرسال النص على واتساب ✅" : "Delivered and sent on WhatsApp ✅");
-      else
-        toast.success(
-          (lang === "ar" ? "تم التسليم — لكن لم تُرسل رسالة الواتساب: " : "Delivered — WhatsApp failed: ") +
-            (r.error || ""),
-        );
+      void codes;
+      toast.success(lang === "ar" ? "تم التسليم — يظهر للعميل في صفحة طلباته ✅" : "Delivered — visible on the customer's orders page ✅");
       setDeliverMode(null);
     } catch {
       toast.error(lang === "ar" ? "تعذر التسليم" : "Delivery failed");
@@ -616,8 +609,8 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
                 ? "⚡ مدفوع من الرصيد — تم التسليم تلقائياً بدون أي موافقة منك."
                 : "⚡ Paid from balance — delivered automatically, no approval needed."
               : lang === "ar"
-                ? "⚡ مدفوع من الرصيد — لا يحتاج موافقة. لم يكتمل التسليم التلقائي (نقص مخزون أو سيرفر الواتساب غير مضبوط) — أكمله من «تسليم من المخزون»."
-                : "⚡ Paid from balance — no approval needed. Auto delivery did not complete (out of stock or WhatsApp server not configured) — finish it with “Deliver from stock”."}
+                ? "⚡ مدفوع من الرصيد — لا يحتاج موافقة. لم يكتمل التسليم التلقائي (نقص مخزون) — أكمله من «تسليم من المخزون»."
+                : "⚡ Paid from balance — no approval needed. Auto delivery did not complete (out of stock) — finish it with “Deliver from stock”."}
           </p>
         )}
         <div className="flex flex-wrap gap-2">
@@ -713,8 +706,8 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
             />
             <p className="text-xs text-muted-foreground">
               {lang === "ar"
-                ? "سيظهر النص في صفحة «طلباتي» للعميل ويُرسل له على الواتساب. لا يُخصم أي مخزون."
-                : "Shown on the customer's orders page and sent on WhatsApp. Stock is untouched."}
+                ? "سيظهر النص في صفحة «طلباتي» للعميل. لا يُخصم أي مخزون."
+                : "Shown on the customer's orders page. Stock is untouched."}
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -753,8 +746,7 @@ function OrderDetail({ order: o, onBack }: { order: Order; onBack: () => void })
                   const why = reason || (lang === "ar" ? "غير متوفر" : "Unavailable");
                   await restoreOrderStock(o.id);
                   await rejectOrder(o.id, why);
-                  const r = await notifyOrderRejected(o, why);
-                  if (!r.ok) toast.error("لم تُرسل رسالة الواتساب: " + (r.error || ""));
+
                 },
 
                 lang === "ar" ? "تم رفض الطلب" : "Order rejected",

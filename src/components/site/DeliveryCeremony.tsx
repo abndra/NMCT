@@ -17,8 +17,8 @@ export function DeliveryCeremony({
 
   const steps =
     lang === "ar"
-      ? ["تم خصم المبلغ من رصيدك", "جاري تجهيز طلبك من المخزون", "الإرسال على واتساب"]
-      : ["Balance charged", "Preparing your items", "Sending on WhatsApp"];
+      ? ["تم خصم المبلغ من رصيدك", "جاري تجهيز طلبك من المخزون", "التسليم في صفحة طلباتك"]
+      : ["Balance charged", "Preparing your items", "Delivering to your orders"];
 
   useEffect(() => {
     const a = setTimeout(() => setStep(1), 900);

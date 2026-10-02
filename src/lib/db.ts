@@ -1592,61 +1592,10 @@ export function normalizeWaServerUrl(raw: string) {
   }
 }
 
+/** نظام الواتساب أُلغي — التسليم والإشعارات تتم داخل الموقع فقط. */
 export async function getWaServer(): Promise<WaServer | null> {
-  const snap = await get(ref(getDb(), "settings/whatsappServer"));
-  if (!snap.exists()) return null;
-  const v = snap.val() as WaServer;
-  return v && v.url ? v : null;
+  return null;
 }
-
-export type WaStatus = {
-  connected?: boolean;
-  status?: string;
-  qr?: string;
-  error?: string;
-  /** false when the saved token is rejected by the server (HTTP 401). */
-  tokenOk?: boolean;
-  /** true when the server can deliver wallet orders automatically (Firebase Admin configured). */
-  autoDelivery?: boolean;
-  autoDeliveryError?: string;
-};
-
-/** Confirms the token is the one the Railway server was deployed with. */
-async function waTokenOk(base: string, token: string): Promise<boolean> {
-  try {
-    const res = await fetch(base + "/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-      body: "{}",
-    });
-    return res.status !== 401 && res.status !== 403;
-  } catch {
-    return false;
-  }
-}
-
-/** Checks whether the Railway bot session is connected (returns the QR when not). */
-export async function waServerStatus(srv: WaServer): Promise<WaStatus> {
-  const base = normalizeWaServerUrl(srv.url);
-  const res = await fetch(base + "/status", {
-    headers: { Authorization: "Bearer " + srv.token },
-  });
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  const st = (await res.json()) as WaStatus;
-  return { ...st, tokenOk: await waTokenOk(base, srv.token) };
-}
-
-/** restart = keep the session, logout = drop it and show a fresh QR. */
-export async function waServerControl(srv: WaServer, action: "restart" | "logout") {
-  const base = normalizeWaServerUrl(srv.url);
-  const res = await fetch(base + "/" + action, {
-    method: "POST",
-    headers: { Authorization: "Bearer " + srv.token },
-  });
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  return (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
-}
-
 export type WaResult = { ok: boolean; error?: string };
 
 /**
@@ -1654,31 +1603,12 @@ export type WaResult = { ok: boolean; error?: string };
  * Never throws: it reports the failure so the UI can show it instead of failing silently.
  */
 export async function sendWhatsApp(
-  phone: string,
-  message: string,
-  srv?: WaServer | null,
-  cc?: string,
+  _phone: string,
+  _message: string,
+  _srv?: WaServer | null,
+  _cc?: string,
 ): Promise<WaResult> {
-  const code = cc || (await getCountryCode());
-  const to = waNumber(phone, code);
-  if (!to) return { ok: false, error: "رقم الهاتف غير صحيح" };
-  try {
-    const server = srv ?? (await getWaServer());
-    if (!server?.url || !server.token)
-      return { ok: false, error: "لم يتم ضبط سيرفر الواتساب في الإعدادات" };
-    const res = await fetch(normalizeWaServerUrl(server.url) + "/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + server.token },
-      body: JSON.stringify({ to, message }),
-    });
-    if (res.ok) return { ok: true };
-    if (res.status === 401 || res.status === 403)
-      return { ok: false, error: "التوكن غير مطابق للسيرفر (401)" };
-    if (res.status === 503) return { ok: false, error: "الواتساب غير مرتبط — امسح رمز QR" };
-    return { ok: false, error: "فشل الإرسال (" + res.status + ")" };
-  } catch (e) {
-    return { ok: false, error: "تعذر الوصول للسيرفر: " + (e instanceof Error ? e.message : "خطأ") };
-  }
+  return { ok: false, error: "disabled" };
 }
 
 /** Settings button: makes sure the whole chain really works. */

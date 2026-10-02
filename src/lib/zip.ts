@@ -6,12 +6,6 @@
  * fallback, producing a broken/empty archive).
  */
 
-import waIndexJs from "../../whatsapp-server/index.js?raw";
-import waPackageJson from "../../whatsapp-server/package.json?raw";
-import waReadme from "../../whatsapp-server/README.md?raw";
-import waRailwayJson from "../../whatsapp-server/railway.json?raw";
-import waProcfile from "../../whatsapp-server/Procfile?raw";
-import waGitignore from "../../whatsapp-server/gitignore.txt?raw";
 
 import bvServer from "../../bank-verify-server/server.js?raw";
 import bvPackage from "../../bank-verify-server/package.json?raw";
@@ -134,24 +128,6 @@ export function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-/** الملفات الحقيقية للسيرفر — مضمّنة في البناء (لا تعتمد على أي طلب شبكة). */
-export function whatsappServerFiles(): { name: string; content: string }[] {
-  return [
-    { name: "index.js", content: waIndexJs },
-    { name: "package.json", content: waPackageJson },
-    { name: "README.md", content: waReadme },
-    { name: "railway.json", content: waRailwayJson },
-    { name: "Procfile", content: waProcfile },
-    { name: ".gitignore", content: waGitignore },
-  ].filter((f) => f.content && f.content.trim().length > 0);
-}
-
-/** Downloads whatsapp-server/* as one ZIP ready to push to GitHub. */
-export async function downloadWhatsappServerZip() {
-  const files = whatsappServerFiles();
-  if (files.length < 3 || !files[0]!.content.includes("express")) throw new Error("server-files-missing");
-  downloadBlob(makeZip(files), "whatsapp-server.zip");
-}
 
 /** ملفات خدمة التحقق البنكي (Railway) — مضمّنة في البناء. */
 export function bankVerifyServerFiles(): { name: string; content: string }[] {
