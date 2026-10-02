@@ -48,15 +48,17 @@ export async function requestInstantDelivery(orderId: string): Promise<InstantDe
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const idToken = await user.getIdToken();
-      // ① Netlify Function على نفس الدومين
-      try {
-        const { res, body } = await callDeliver("/api/deliver", {}, idToken, orderId);
-        if (res.ok && body.ok) return { ok: true, codes: body.codes || [], missing: body.missing || [] };
-        if (body.error === "out-of-stock" || body.error === "needs-manual-approval")
-          return { ok: false, error: "HTTP " + res.status, reason: body.error };
-        last = { ok: false, error: "HTTP " + res.status, reason: body.error || "" };
-      } catch (e) {
-        last = { ok: false, error: e instanceof Error ? e.message : "fetch" };
+      // ① خدمة التسليم على نفس الموقع (Lovable أو Netlify)
+      for (const path of ["/api/public/deliver", "/api/deliver"]) {
+        try {
+          const { res, body } = await callDeliver(path, {}, idToken, orderId);
+          if (res.ok && body.ok) return { ok: true, codes: body.codes || [], missing: body.missing || [] };
+          if (body.error === "out-of-stock" || body.error === "needs-manual-approval")
+            return { ok: false, error: "HTTP " + res.status, reason: body.error };
+          last = { ok: false, error: "HTTP " + res.status, reason: body.error || "" };
+        } catch (e) {
+          last = { ok: false, error: e instanceof Error ? e.message : "fetch" };
+        }
       }
       // ② السيرفر الخارجي (احتياطي)
       const srv = await getWaServer();
