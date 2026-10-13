@@ -30,7 +30,7 @@ export const cfg = {
   dbSecret: env.FIREBASE_DB_SECRET || "",
   apiKey: env.FIREBASE_API_KEY || "AIzaSyB0AOQwMAblWOcw-xYeMvTXwrdm3aoFlC4",
 
-  verifyWindowMs: num(env.VERIFY_WINDOW_MINUTES, 3) * 60_000,
+  verifyWindowMs: num(env.VERIFY_WINDOW_MINUTES, 10) * 60_000,
   lookbackMs: num(env.MATCH_LOOKBACK_MINUTES, 15) * 60_000,
   pollMs: num(env.POLL_INTERVAL_SECONDS, 10) * 1000,
   gmailSender: env.GMAIL_SENDER || "",
