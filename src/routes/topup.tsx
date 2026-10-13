@@ -9,7 +9,6 @@ import {
   Clock,
   Copy,
   Hash,
-  Landmark,
   Loader2,
   ShieldCheck,
   Wallet,
@@ -42,7 +41,7 @@ export const Route = createFileRoute("/topup")({
       {
         name: "description",
         content:
-          "اشحن رصيد محفظتك في NMCT بالتحويل البنكي — يتم التحقق من التحويل تلقائياً خلال 3 دقائق ويُضاف الرصيد فوراً.",
+          "اشحن رصيد محفظتك في NMCT بالتحويل البنكي — يتم التحقق من التحويل تلقائياً خلال 10 دقائق ويُضاف الرصيد فوراً.",
       },
       { property: "og:title", content: "شحن الرصيد بالتحويل البنكي | NMCT" },
       { property: "og:description", content: "تحقق تلقائي من التحويل البنكي وإضافة الرصيد خلال دقائق." },
@@ -117,8 +116,8 @@ function TopupPage() {
     if (ref.replace(/\D/g, "").length < 4) {
       toast.error(
         lang === "ar"
-          ? "أدخل رقم/مرجع التحويل البنكي كما ظهر لك عند التحويل"
-          : "Enter the bank transfer reference exactly as shown when you transferred",
+          ? "أدخل الرقم الذي ستحوّل منه"
+          : "Enter the number you will transfer from",
       );
       return;
     }
@@ -187,8 +186,8 @@ function TopupPage() {
           <h1 className="font-display text-3xl">🏦 {lang === "ar" ? "شحن الرصيد بالتحويل البنكي" : "Top up by bank transfer"}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {lang === "ar"
-              ? "حوّل المبلغ، أدخل مرجع التحويل، ويتحقق النظام تلقائياً خلال 3 دقائق ويضيف الرصيد فوراً."
-              : "Transfer the amount, enter the reference, and the system verifies automatically within 3 minutes."}
+              ? "أدخل المبلغ والرقم الذي ستحوّل منه، أكّد الطلب ثم حوّل خلال 10 دقائق ويُضاف الرصيد تلقائياً."
+              : "Enter the amount and your sending number, confirm, then transfer within 10 minutes."}
           </p>
         </div>
 
@@ -207,6 +206,7 @@ function TopupPage() {
           </div>
         ) : activeId ? (
           <VerificationScreen
+            bank={bank}
             id={activeId}
             onNew={() => {
               setActiveId("");
@@ -216,38 +216,6 @@ function TopupPage() {
           />
         ) : (
           <div className="mt-6 space-y-5">
-            {bank && (
-              <Section icon={<Landmark className="size-4" />} title={lang === "ar" ? "بيانات الحساب البنكي" : "Bank account details"}>
-                <p className="mb-3 text-xs text-muted-foreground">
-                  {lang === "ar"
-                    ? "حوّل المبلغ بالضبط إلى الحساب التالي، ثم أدخل رقم/مرجع التحويل في النموذج أدناه."
-                    : "Transfer the exact amount to this account, then enter the transfer reference below."}
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {bank.fields.map((f) => (
-                    <button
-                      key={f.label}
-                      type="button"
-                      onClick={() => {
-                        void navigator.clipboard?.writeText(f.value);
-                        toast.success(lang === "ar" ? "تم النسخ" : "Copied");
-                      }}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background/60 p-3 text-start hover:border-primary/50"
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-[11px] text-muted-foreground">{f.label}</span>
-                        <span dir="ltr" className="block truncate font-tech text-sm">{f.value}</span>
-                      </span>
-                      <Copy className="size-4 shrink-0 text-muted-foreground" />
-                    </button>
-                  ))}
-                </div>
-                {(lang === "ar" ? bank.note : bank.noteEn || bank.note) && (
-                  <p className="mt-3 text-xs text-muted-foreground">{lang === "ar" ? bank.note : bank.noteEn || bank.note}</p>
-                )}
-              </Section>
-            )}
-
             <Section icon={<Banknote className="size-4" />} title={lang === "ar" ? "مبلغ الشحن (OMR)" : "Top-up amount (OMR)"}>
               <div className="flex flex-wrap gap-2">
                 {QUICK_AMOUNTS.map((q) => (
@@ -325,7 +293,7 @@ function TopupPage() {
               <label className="mt-3 block">
                 <span className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
                   <Hash className="size-3" />
-                  {lang === "ar" ? "رقم / مرجع التحويل البنكي *" : "Bank transfer reference *"}
+                  {lang === "ar" ? "الرقم الذي ستحوّل منه *" : "Number you will transfer from *"}
                 </span>
                 <input
                   value={bankRef}
@@ -337,8 +305,8 @@ function TopupPage() {
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   {lang === "ar"
-                    ? "الرقم/المرجع الذي استخدمته عند التحويل (يظهر في تطبيق البنك وفي رسالة التأكيد)."
-                    : "The reference you used when transferring (shown in your bank app and confirmation)."}
+                    ? "رقم حسابك أو هاتفك الذي ستحوّل منه. بعد التأكيد يظهر لك رقم الحساب الذي تحوّل إليه."
+                    : "Your account/phone number you will transfer from. The destination account appears after you confirm."}
                 </p>
               </label>
 
@@ -361,15 +329,15 @@ function TopupPage() {
               <p className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
                 {lang === "ar"
-                  ? "بعد الإرسال يبدأ التحقق التلقائي لمدة 3 دقائق. عند العثور على تحويل مطابق (نفس المبلغ والمرجع) يُضاف الرصيد فوراً."
-                  : "After sending, automatic verification runs for 3 minutes. Once a matching transfer is found (same amount and reference) the balance is added instantly."}
+                  ? "بعد التأكيد يظهر لك رقم الحساب الذي تحوّل إليه ومهلة 10 دقائق. عند وصول التحويل المطابق يُضاف الرصيد فوراً."
+                  : "After confirming, the destination account and a 10-minute window appear. Balance is added once the matching transfer arrives."}
               </p>
               <button
                 disabled={busy}
                 onClick={() => void submit()}
                 className="mt-5 hidden h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground disabled:opacity-60 sm:block"
               >
-                {busy ? "..." : lang === "ar" ? "إرسال طلب الشحن والتحقق" : "Send & verify"}
+                {busy ? "..." : lang === "ar" ? "تأكيد الطلب" : "Confirm request"}
               </button>
             </div>
           </div>
@@ -383,7 +351,7 @@ function TopupPage() {
             onClick={() => void submit()}
             className="h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground disabled:opacity-60"
           >
-            {busy ? "..." : `${lang === "ar" ? "شحن" : "Top up"} · ${omr3(amount, lang)}`}
+            {busy ? "..." : `${lang === "ar" ? "تأكيد الطلب" : "Confirm"} · ${omr3(amount, lang)}`}
           </button>
         </div>
       )}
@@ -392,7 +360,7 @@ function TopupPage() {
 }
 
 /* ---------------- شاشة الانتظار / النتيجة ---------------- */
-function VerificationScreen({ id, onNew }: { id: string; onNew: () => void }) {
+function VerificationScreen({ id, onNew, bank }: { id: string; onNew: () => void; bank?: ReturnType<typeof readPaymentMethods>[number] | undefined }) {
   const { lang } = useI18n();
   const { balance } = useBalance();
   const [t, setT] = useState<TopupRequest | null>(null);
@@ -468,9 +436,25 @@ function VerificationScreen({ id, onNew }: { id: string; onNew: () => void }) {
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
               {lang === "ar"
-                ? "نبحث عن إشعار بنكي يطابق المبلغ ومرجع التحويل. يُضاف الرصيد تلقائياً فور العثور عليه — يمكنك إبقاء هذه الصفحة مفتوحة."
-                : "We are looking for a bank notification matching your amount and reference. Balance is added automatically as soon as it is found."}
+                ? "حوّل المبلغ الآن إلى الحساب الموضح أدناه خلال 10 دقائق. يُضاف الرصيد تلقائياً فور وصول التحويل — أبقِ هذه الصفحة مفتوحة."
+                : "Transfer the amount now to the account below within 10 minutes. Balance is added automatically once it arrives."}
             </p>
+            {bank && (
+              <div className="mt-5 text-start">
+                <p className="mb-2 font-display text-sm">{lang === "ar" ? "حوّل إلى هذا الحساب:" : "Transfer to this account:"}</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {bank.fields.map((f) => (
+                    <button key={f.label} type="button" onClick={() => { void navigator.clipboard?.writeText(f.value); toast.success(lang === "ar" ? "تم النسخ" : "Copied"); }} className="flex items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-background/60 p-3 text-start hover:border-primary">
+                      <span className="min-w-0">
+                        <span className="block text-[11px] text-muted-foreground">{f.label}</span>
+                        <span dir="ltr" className="block truncate font-tech text-sm">{f.value}</span>
+                      </span>
+                      <Copy className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -483,7 +467,7 @@ function VerificationScreen({ id, onNew }: { id: string; onNew: () => void }) {
               {lang === "ar" ? "المبلغ:" : "Amount:"} <span className="font-tech text-foreground">{omr3(t.amount, lang)}</span>
             </p>
             <p>
-              {lang === "ar" ? "المرجع:" : "Reference:"} <span dir="ltr" className="font-tech text-foreground">{t.bankRef}</span>
+              {lang === "ar" ? "يحوّل من:" : "From:"} <span dir="ltr" className="font-tech text-foreground">{t.bankRef}</span>
             </p>
           </div>
         )}

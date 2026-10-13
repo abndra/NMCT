@@ -39,7 +39,7 @@ import {
 /* ============================ TYPES ============================ */
 /**
  * pending   = طلب قديم بانتظار مراجعة يدوية
- * verifying = تحويل بنكي قيد التحقق التلقائي (3 دقائق)
+ * verifying = تحويل بنكي قيد التحقق التلقائي (10 دقائق)
  * approved  = مقبول وأُضيف الرصيد
  * expired   = انتهت مهلة التحقق بدون عملية مطابقة
  * rejected  = مرفوض يدوياً
@@ -467,7 +467,7 @@ export function adminTopupMessage(t: Omit<TopupRequest, "id">, no: string) {
     ...(t.amountToPay
       ? [`🧾 *المبلغ المحوَّل:* ${t.amountToPay} ${t.paymentCurrency || ""}`]
       : []),
-    ...(t.bankRef ? [`🔖 *مرجع التحويل:* ${t.bankRef}`, "🤖 *التحقق:* تلقائي عبر إشعار البنك (3 دقائق)"] : []),
+    ...(t.bankRef ? [`🔖 *مرجع التحويل:* ${t.bankRef}`, "🤖 *التحقق:* تلقائي عبر إشعار البنك (10 دقائق)"] : []),
     ...(t.cardNumbers?.length ? [`🎟️ *أكواد البطاقات:* ${t.cardNumbers.join(" | ")}`] : []),
     ...(t.receiptImage ? [`🖼️ *الإيصال:* ${t.receiptImage}`] : []),
     ...(t.note ? [`🗒️ *ملاحظة:* ${t.note}`] : []),

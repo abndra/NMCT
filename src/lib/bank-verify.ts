@@ -13,7 +13,7 @@ import { get, onValue, ref, set } from "firebase/database";
 import { getDb, getFbAuth } from "./firebase";
 import { normalizeWaServerUrl, type Unsub } from "./db";
 
-export const VERIFY_WINDOW_MS = 3 * 60_000;
+export const VERIFY_WINDOW_MS = 10 * 60_000;
 
 export type BankVerifyConfig = { url: string; token: string };
 

@@ -158,8 +158,8 @@ function WalletPage() {
                           className="mt-2 block rounded-xl bg-sky-500/10 p-2 text-xs text-sky-400"
                         >
                           {lang === "ar"
-                            ? "جارٍ التحقق التلقائي من التحويل البنكي (حتى 3 دقائق)…"
-                            : "Automatic bank verification in progress (up to 3 minutes)…"}
+                            ? "جارٍ التحقق التلقائي من التحويل البنكي (حتى 10 دقائق)…"
+                            : "Automatic bank verification in progress (up to 10 minutes)…"}
                         </Link>
                       )}
                       {(t.status === "rejected" || t.status === "expired") && (
