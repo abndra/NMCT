@@ -32,6 +32,8 @@ export const cfg = {
 
   verifyWindowMs: num(env.VERIFY_WINDOW_MINUTES, 10) * 60_000,
   lookbackMs: num(env.MATCH_LOOKBACK_MINUTES, 15) * 60_000,
+  /** مهلة إضافية لقبول تحويل وصل بعد انتهاء العدّاد (افتراضي 60 دقيقة). */
+  lateGraceMs: num(env.LATE_GRACE_MINUTES, 60) * 60_000,
   pollMs: num(env.POLL_INTERVAL_SECONDS, 10) * 1000,
   gmailSender: env.GMAIL_SENDER || "",
   gmailQuery: env.GMAIL_QUERY || "",

@@ -105,13 +105,16 @@ async function approve(t, m) {
 
   // 2) تغيير حالة الطلب بكتابة شرطية (قد يكون الأدمن قبله يدوياً في الأثناء)
   const { value: fresh, etag: tEtag } = await dbGetWithEtag(`topups/${t.id}`);
-  if (!fresh || fresh.status !== "verifying") {
+  if (!fresh || (fresh.status !== "verifying" && fresh.status !== "expired") || fresh.bankTxId) {
     await dbPatch("bank_verify/used_tx", { [m.id]: null }); // تحرير الحجز
     return false;
   }
   const now = Date.now();
   const okFlip = await dbPutIfMatch(`topups/${t.id}`, tEtag, {
     ...fresh,
+    requestedAmount: Number(fresh.amount) || 0,
+    amount: Number(Number(m.amount).toFixed(3)),
+    rejectionReason: null,
     status: "approved",
     verifiedAt: now,
     reviewedAt: now,
@@ -125,7 +128,7 @@ async function approve(t, m) {
   }
 
   // 3) إضافة الرصيد مرة واحدة
-  const balanceAfter = await creditBalance({ ...fresh, id: t.id });
+  const balanceAfter = await creditBalance({ ...fresh, id: t.id, amount: m.amount });
   await bump("verified");
   await logEvent({
     kind: "verified",
@@ -172,24 +175,45 @@ async function recoverUncredited() {
 }
 
 /* ------------------------------ الدورة ------------------------------ */
-function matches(t, m, deadline) {
+/**
+ * المطابقة (إصلاح جذري):
+ *  - المرجع (رقم المحوِّل) + الوقت هما الأساس. المبلغ الفعلي يُؤخذ من إشعار البنك
+ *    لأن العميل قد يكتب مبلغاً ويحوّل مبلغاً مختلفاً قليلاً (مثال: طلب 55 وحوّل 55.4).
+ *  - الأولوية: (مرجع + مبلغ مطابق) ← (مرجع فقط) ← (مبلغ مطابق فقط إذا كان فريداً).
+ *  - الطلبات المنتهية مؤخراً تُفحص أيضاً حتى لا يضيع تحويل وصل متأخراً.
+ */
+export function inWindow(t, m, deadline) {
   const created = Number(t.createdAt) || 0;
-  if (!sameAmount(t.amount, m.amount)) return false;
-  if (!sameReference(t.bankRef, m.reference)) return false;
-  if (m.receivedAt < created - cfg.lookbackMs) return false;
-  if (m.receivedAt > deadline + 30_000) return false;
-  return true;
+  const late = t.status === "expired" ? cfg.lateGraceMs : 30_000;
+  return m.receivedAt >= created - cfg.lookbackMs && m.receivedAt <= deadline + late;
+}
+
+export function pickMatch(t, cands, deadline, usedIds, pendingAll) {
+  const inWin = cands.filter((m) => !usedIds.has(m.id) && inWindow(t, m, deadline));
+  const byRef = inWin.filter((m) => sameReference(t.bankRef, m.reference));
+  const exact = byRef.find((m) => sameAmount(t.amount, m.amount));
+  if (exact) return exact;
+  if (byRef.length) return byRef[0];
+  // بدون مرجع مطابق: نقبل بالمبلغ فقط إذا كان هناك إشعار واحد وطلب واحد بهذا المبلغ
+  const byAmt = inWin.filter((m) => sameAmount(t.amount, m.amount));
+  const others = pendingAll.filter((o) => o.id !== t.id && sameAmount(o.amount, t.amount));
+  if (byAmt.length === 1 && others.length === 0) return byAmt[0];
+  return null;
 }
 
 export async function tick() {
   if (ticking) return;
   ticking = true;
   try {
-    const rows = await dbQuery("topups", "status", "verifying");
-    const pending = Object.entries(rows || {})
+    const now = Date.now();
+    const rowsV = await dbQuery("topups", "status", "verifying");
+    const rowsE = await dbQuery("topups", "status", "expired").catch(() => null);
+    const isBank = (t) => t.verification === "bank" || t.bankRef;
+    const verifying = Object.entries(rowsV || {}).map(([id, t]) => ({ id, ...t })).filter(isBank);
+    const lateExpired = Object.entries(rowsE || {})
       .map(([id, t]) => ({ id, ...t }))
-      .filter((t) => t.verification === "bank" || t.bankRef)
-      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      .filter((t) => isBank(t) && !t.bankTxId && now - (Number(t.expiredAt) || 0) < cfg.lateGraceMs);
+    const pending = [...verifying, ...lateExpired].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
 
     if (!pending.length) {
       await heartbeat({ pendingCount: 0, lastError: "" });
@@ -200,30 +224,34 @@ export async function tick() {
     let gmailError = "";
     try {
       const r = await loadCandidates();
-      candidates = r.list;
+      candidates = r.list.sort((a, b) => a.receivedAt - b.receivedAt);
       if (!r.connected) gmailError = "Gmail غير مرتبط";
     } catch (e) {
       gmailError = e instanceof Error ? e.message : "gmail-error";
       console.error("[verify] gmail:", gmailError);
     }
 
-    const now = Date.now();
+    const usedObj = (await dbGet("bank_verify/used_tx", "&shallow=true").catch(() => null)) || {};
+    const usedIds = new Set(Object.keys(usedObj));
+
     for (const t of pending) {
       const deadline = Number(t.verifyDeadline) || (Number(t.createdAt) || now) + cfg.verifyWindowMs;
       let done = false;
-      for (const m of candidates.sort((a, b) => a.receivedAt - b.receivedAt)) {
-        if (matches(t, m, deadline)) {
-          try {
-            done = await approve(t, m);
-          } catch (e) {
-            console.error("[verify] approve failed", t.id, e?.message);
-          }
-          if (done) break;
+      for (let i = 0; i < 3 && !done; i++) {
+        const m = pickMatch(t, candidates, deadline, usedIds, pending);
+        if (!m) break;
+        try {
+          done = await approve(t, m);
+        } catch (e) {
+          console.error("[verify] approve failed", t.id, e?.message);
         }
+        usedIds.add(m.id);
       }
-      if (!done && now > deadline) await expire(t).catch((e) => console.error("[verify] expire failed", e?.message));
+      if (done) continue;
+      if (t.status === "verifying" && now > deadline)
+        await expire(t).catch((e) => console.error("[verify] expire failed", e?.message));
     }
-    await heartbeat({ pendingCount: pending.length, lastError: gmailError });
+    await heartbeat({ pendingCount: verifying.length, lastError: gmailError });
   } catch (e) {
     console.error("[verify] tick error:", e?.message);
     await heartbeat({ lastError: e instanceof Error ? e.message : "tick-error" });
