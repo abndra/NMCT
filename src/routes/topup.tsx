@@ -371,6 +371,14 @@ function VerificationScreen({ id, onNew, bank }: { id: string; onNew: () => void
     const i = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(i);
   }, []);
+  // طالما الصفحة مفتوحة والطلب قيد التحقق: نطلب فحصاً فورياً كل 12 ثانية
+  // (الفحص يعمل أيضاً كل دقيقة على الخادم حتى لو أُغلقت الصفحة)
+  const isVerifying = (t?.status || "verifying") === "verifying";
+  useEffect(() => {
+    if (!isVerifying) return;
+    const i = setInterval(() => void kickBankVerification(id), 12_000);
+    return () => clearInterval(i);
+  }, [id, isVerifying]);
 
   const deadline = t?.verifyDeadline || (t?.createdAt || now) + VERIFY_WINDOW_MS;
   const left = Math.max(0, deadline - now);
@@ -402,6 +410,16 @@ function VerificationScreen({ id, onNew, bank }: { id: string; onNew: () => void
               {lang === "ar"
                 ? "لم يتمكن النظام من العثور على عملية بنكية مطابقة خلال فترة التحقق، ولم يُضف أي رصيد. تأكد من المبلغ ومرجع التحويل ثم أعد المحاولة، أو تواصل معنا على الواتساب."
                 : "No matching bank transaction was found during the verification window and no balance was added. Check the amount and reference and try again, or contact us on WhatsApp."}
+            </p>
+          </>
+        ) : status === "pending" ? (
+          <>
+            <Loader2 className="mx-auto size-16 animate-spin text-primary" />
+            <h2 className="mt-4 font-display text-2xl">{lang === "ar" ? "طلبك قيد المراجعة" : "Your request is under review"}</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {lang === "ar"
+                ? "استلمنا طلبك وسيتم التأكد من التحويل وإضافة الرصيد في أقرب وقت. لا تحتاج لإعادة التحويل."
+                : "We received your request. The transfer will be confirmed and your balance added shortly — no need to transfer again."}
             </p>
           </>
         ) : status === "rejected" ? (

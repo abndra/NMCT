@@ -1,6 +1,7 @@
 /**
  * نظام التحقق البنكي — الجهة الأمامية.
- * الخدمة نفسها تعمل على Railway (مجلد bank-verify-server) وتتواصل مع Firebase مباشرة.
+ * الخدمة نفسها تعمل كـ Netlify Functions على نفس الموقع (netlify/functions/bank-verify*.mjs)
+ * وتستخدم منطق مجلد bank-verify-server، وتتواصل مع Firebase مباشرة.
  *
  * مسارات قاعدة البيانات:
  *  - settings/bankVerifyUrl        رابط الخدمة (عام — يستخدمه العميل لإخطار الخدمة)
@@ -28,7 +29,7 @@ export type BankVerifyState = {
 
 export type BankVerifyLog = {
   id: string;
-  kind: "verified" | "expired";
+  kind: "verified" | "expired" | "manual";
   topupId: string;
   topupNo: string;
   amount: number;
@@ -116,8 +117,24 @@ export function onUsedBankTx(cb: (items: UsedBankTx[]) => void): Unsub {
 }
 
 /* ---------------- استدعاء الخدمة ---------------- */
+/**
+ * الخدمة مدمجة الآن في نفس موقع Netlify تحت /bank-api (لا تحتاج Railway).
+ * رابط فارغ أو رابط Railway قديم أو رابط هذا الموقع ← الخدمة المدمجة.
+ * أي رابط خارجي آخر ← سيرفر مستقل (مجلد bank-verify-server) للتوافق.
+ */
+export function resolveBankBase(raw: string): string {
+  const here = typeof window !== "undefined" ? window.location.origin : "";
+  const ext = normalizeWaServerUrl(raw);
+  if (!ext || /railway\.app$/i.test(ext) || ext === here || /\.netlify\.app$/i.test(ext)) {
+    const host = ext && /\.netlify\.app$/i.test(ext) ? ext : here;
+    return host ? host + "/bank-api" : "";
+  }
+  return ext;
+}
+export const isBuiltInBank = (raw: string) => resolveBankBase(raw).endsWith("/bank-api");
+
 async function call<T>(cfg: BankVerifyConfig, path: string, init: RequestInit = {}): Promise<T> {
-  const base = normalizeWaServerUrl(cfg.url);
+  const base = resolveBankBase(cfg.url);
   if (!base) throw new Error("no-url");
   const res = await fetch(base + path, {
     ...init,
@@ -171,9 +188,12 @@ export type GmailCheck = {
 export const bankGmailCheck = (cfg: BankVerifyConfig) => call<GmailCheck>(cfg, "/gmail/check");
 
 /** العميل يُخطر الخدمة بطلب جديد لتبدأ الفحص فوراً (الخدمة تفحص دورياً على أي حال). */
-export async function kickBankVerification(topupId: string): Promise<{ ok: boolean; gmailConnected?: boolean }> {
+export async function kickBankVerification(
+  topupId: string,
+): Promise<{ ok: boolean; status?: string; gmailConnected?: boolean }> {
   try {
-    const [url, idToken] = await Promise.all([getBankVerifyUrl(), getFbAuth().currentUser?.getIdToken()]);
+    const [raw, idToken] = await Promise.all([getBankVerifyUrl(), getFbAuth().currentUser?.getIdToken()]);
+    const url = resolveBankBase(raw);
     if (!url || !idToken) return { ok: false };
     const res = await fetch(url + "/verify/start", {
       method: "POST",
