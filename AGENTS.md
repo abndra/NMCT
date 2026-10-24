@@ -13,3 +13,5 @@
 
 - Image uploads go to ImgBB via `src/lib/uploads.ts`; old Cloudinary URLs are mapped in `src/lib/image-map.ts` so legacy data keeps rendering.
 - Wallet-order delivery happens only inside the site (no WhatsApp): checkout and the buyer's orders page call /api/deliver (Netlify fn, relays to the hosted /api/public/deliver when FIREBASE_DB_SECRET is unset) then the hosted endpoint directly — buyers never wait for manual approval and the store owner needs no server setup.
+- Bank-transfer auto-verification runs as Netlify Functions on the store site (`netlify/functions/bank-verify.mjs` at /bank-api/*, plus a per-minute scheduled `bank-verify-cron.mjs`) importing the shared logic in `bank-verify-server/src`; no always-on server is required, so verification cannot silently stop when an external host sleeps.
+- When Gmail cannot be read, a timed-out bank top-up moves to `pending` (manual review, `manualReason` set) instead of `expired`, and is still auto-approved if the transfer is found later — customers are never told their transfer failed because of an outage on our side.

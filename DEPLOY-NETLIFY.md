@@ -55,3 +55,25 @@ VITE_FIREBASE_APP_ID=1:478244762156:web:b9a7f325a363ceac609789
 - الصفحة الرئيسية تفتح (ليست 404).
 - صفحة الدفع: رمز الدولة الافتراضي 🇴🇲 +968.
 - لوحة التحكم: أضف مخزوناً حقيقياً ثم اضغط "تم التسليم" → يصل الكود في "طلباتي" وعلى واتساب.
+
+---
+
+## التحقق البنكي التلقائي (مدمج في Netlify — بدون Railway)
+
+الخدمة الآن تعمل داخل نفس موقع Netlify:
+- `/bank-api/*` ← لوحة التحكم + فحص فوري أثناء انتظار العميل
+- دالة مجدولة تفحص كل دقيقة حتى لو أغلق العميل الصفحة
+
+### متغيرات البيئة (Netlify › Site configuration › Environment variables)
+| المتغير | القيمة |
+|---|---|
+| TOKEN | نص سري طويل تختاره (نفسه يُكتب في لوحة التحكم › التحقق البنكي) |
+| ENCRYPTION_KEY | `openssl rand -hex 32` |
+| GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET | من Google Cloud › Credentials |
+| FIREBASE_DB_SECRET | موجود مسبقاً (لنفس دالة التسليم) |
+| GMAIL_SENDER (اختياري) | `alerts@sib.om` |
+
+### Google Cloud (مرة واحدة)
+1. Credentials › عميل OAuth › أضف Redirect URI: `https://<موقعك>.netlify.app/bank-api/oauth/google/callback`
+2. **Google Auth Platform › Audience › Publish app › In production** ← بدونها يُلغى الربط كل 7 أيام (خطأ `invalid_grant`).
+3. لوحة التحكم › التحقق البنكي › اترك الرابط فارغاً، ضع التوكن، احفظ، ثم «ربط Gmail».

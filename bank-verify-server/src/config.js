@@ -6,8 +6,11 @@ const num = (v, d) => {
   return Number.isFinite(n) && n > 0 ? n : d;
 };
 
-const publicUrl = String(env.PUBLIC_URL || "").replace(/\/+$/, "");
-const siteUrl = String(env.SITE_URL || "").replace(/\/+$/, "");
+// على Netlify: المتغير URL يُضبط تلقائياً برابط الموقع، والخدمة تعمل تحت /bank-api
+const onNetlify = Boolean(env.NETLIFY || env.NETLIFY_LOCAL || env.AWS_LAMBDA_FUNCTION_NAME);
+const netlifyUrl = String(env.URL || "").replace(/\/+$/, "");
+const publicUrl = String(env.PUBLIC_URL || (onNetlify && netlifyUrl ? netlifyUrl + "/bank-api" : "")).replace(/\/+$/, "");
+const siteUrl = String(env.SITE_URL || (onNetlify ? netlifyUrl : "")).replace(/\/+$/, "");
 
 export const cfg = {
   port: env.PORT || 3000,

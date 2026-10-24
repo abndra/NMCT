@@ -7,9 +7,11 @@ import { parseBankNotification } from "./parser.js";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 
-export function defaultQuery() {
+/** sinceMs (اختياري): لا نقرأ إلا الرسائل منذ أقدم طلب معلّق — أسرع وأقل استهلاكاً. */
+export function defaultQuery(sinceMs) {
   if (cfg.gmailQuery) return cfg.gmailQuery;
-  const parts = ['"CREDITED"', "newer_than:2d"];
+  const after = Number(sinceMs) > 0 ? `after:${Math.floor(Number(sinceMs) / 1000)}` : "newer_than:2d";
+  const parts = ['"CREDITED"', after];
   if (cfg.gmailSender) parts.unshift(`from:${cfg.gmailSender}`);
   return parts.join(" ");
 }
@@ -23,7 +25,7 @@ async function gget(accessToken, path) {
   return r.json();
 }
 
-export async function listMessageIds(accessToken, q = defaultQuery(), max = 25) {
+export async function listMessageIds(accessToken, q = defaultQuery(), max = 50) {
   const data = await gget(accessToken, `/messages?maxResults=${max}&q=${encodeURIComponent(q)}`);
   return (data.messages || []).map((m) => m.id);
 }

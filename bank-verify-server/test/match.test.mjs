@@ -27,3 +27,11 @@ test("expired order still catches a transfer that arrived late (within 60 min)",
   const e = { ...t, status: "expired", createdAt: now - 30 * 60_000 };
   assert.equal(pickMatch(e, [m], e.createdAt + 600_000, new Set(), [e])?.id, "g1");
 });
+test("order moved to manual review (Gmail was down) is auto-approved once the transfer is found", () => {
+  const p = { ...t, status: "pending", manualReason: "google-token: invalid_grant", createdAt: now - 20 * 60_000 };
+  assert.equal(pickMatch(p, [m], p.createdAt + 600_000, new Set(), [p])?.id, "g1");
+});
+test("Gmail search only looks at messages since the oldest pending order", async () => {
+  const { defaultQuery } = await import("../src/gmail.js");
+  assert.match(defaultQuery(1_800_000_000_000), /after:1800000000/);
+});

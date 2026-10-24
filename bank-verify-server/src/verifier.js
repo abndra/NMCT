@@ -13,7 +13,7 @@
  */
 import { cfg } from "./config.js";
 import { dbGet, dbPatch, dbPush, dbPutIfMatch, dbGetWithEtag, dbQuery, dbTransaction } from "./firebase.js";
-import { fetchParsedMessage, listMessageIds } from "./gmail.js";
+import { defaultQuery, fetchParsedMessage, listMessageIds } from "./gmail.js";
 import { getAccessToken } from "./google-oauth.js";
 import { maskName, maskReference, sameAmount, sameReference } from "./parser.js";
 
@@ -50,10 +50,10 @@ async function logEvent(ev) {
 }
 
 /* ------------------------------ Gmail ------------------------------ */
-async function loadCandidates() {
+async function loadCandidates(sinceMs) {
   const accessToken = await getAccessToken();
   if (!accessToken) return { connected: false, list: [] };
-  const ids = await listMessageIds(accessToken);
+  const ids = await listMessageIds(accessToken, defaultQuery(sinceMs));
   for (const id of ids) {
     if (parsedCache.has(id)) continue;
     try {
@@ -105,7 +105,9 @@ async function approve(t, m) {
 
   // 2) تغيير حالة الطلب بكتابة شرطية (قد يكون الأدمن قبله يدوياً في الأثناء)
   const { value: fresh, etag: tEtag } = await dbGetWithEtag(`topups/${t.id}`);
-  if (!fresh || (fresh.status !== "verifying" && fresh.status !== "expired") || fresh.bankTxId) {
+  const reopenable =
+    fresh && (fresh.status === "verifying" || fresh.status === "expired" || (fresh.status === "pending" && fresh.manualReason));
+  if (!reopenable || fresh.bankTxId) {
     await dbPatch("bank_verify/used_tx", { [m.id]: null }); // تحرير الحجز
     return false;
   }
@@ -115,6 +117,7 @@ async function approve(t, m) {
     requestedAmount: Number(fresh.amount) || 0,
     amount: Number(Number(m.amount).toFixed(3)),
     rejectionReason: null,
+    manualReason: null,
     status: "approved",
     verifiedAt: now,
     reviewedAt: now,
@@ -161,8 +164,27 @@ async function expire(t) {
   console.log(`[verify] expired ${formatNo(t)}`);
 }
 
+/**
+ * إصلاح جذري: إذا كان Gmail غير متصل (أو تعذّر قراءته) لا نرفض طلب العميل أبداً.
+ * الطلب ينتقل إلى "قيد المراجعة" ليقبله الأدمن يدوياً بدل أن يظهر للعميل كأنه فشل.
+ */
+async function toManualReview(t, reason) {
+  const { value: fresh, etag } = await dbGetWithEtag(`topups/${t.id}`);
+  if (!fresh || fresh.status !== "verifying") return;
+  const now = Date.now();
+  const ok = await dbPutIfMatch(`topups/${t.id}`, etag, {
+    ...fresh,
+    status: "pending",
+    manualReviewAt: now,
+    manualReason: reason || "auto-verify-unavailable",
+  });
+  if (!ok) return;
+  await logEvent({ kind: "manual", topupId: t.id, topupNo: formatNo(t), amount: Number(fresh.amount) || 0 });
+  console.log(`[verify] moved to manual review ${formatNo(t)}`);
+}
+
 /** إعادة إضافة الرصيد لطلب قُبل تلقائياً لكن الخدمة توقفت قبل إتمام الإضافة. */
-async function recoverUncredited() {
+export async function recoverUncredited() {
   const rows = await dbQuery("topups", "credited", false).catch(() => null);
   for (const [id, t] of Object.entries(rows || {})) {
     if (t?.status === "approved" && t.verifiedBy === "bank-auto") {
@@ -184,7 +206,7 @@ async function recoverUncredited() {
  */
 export function inWindow(t, m, deadline) {
   const created = Number(t.createdAt) || 0;
-  const late = t.status === "expired" ? cfg.lateGraceMs : 30_000;
+  const late = t.status === "expired" || t.status === "pending" ? cfg.lateGraceMs : 30_000;
   return m.receivedAt >= created - cfg.lookbackMs && m.receivedAt <= deadline + late;
 }
 
@@ -202,18 +224,24 @@ export function pickMatch(t, cands, deadline, usedIds, pendingAll) {
 }
 
 export async function tick() {
-  if (ticking) return;
+  if (ticking) return false;
   ticking = true;
   try {
     const now = Date.now();
     const rowsV = await dbQuery("topups", "status", "verifying");
     const rowsE = await dbQuery("topups", "status", "expired").catch(() => null);
+    const rowsP = await dbQuery("topups", "status", "pending").catch(() => null);
     const isBank = (t) => t.verification === "bank" || t.bankRef;
-    const verifying = Object.entries(rowsV || {}).map(([id, t]) => ({ id, ...t })).filter(isBank);
-    const lateExpired = Object.entries(rowsE || {})
-      .map(([id, t]) => ({ id, ...t }))
-      .filter((t) => isBank(t) && !t.bankTxId && now - (Number(t.expiredAt) || 0) < cfg.lateGraceMs);
-    const pending = [...verifying, ...lateExpired].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const rows = (r) => Object.entries(r || {}).map(([id, t]) => ({ id, ...t }));
+    const verifying = rows(rowsV).filter(isBank);
+    const lateExpired = rows(rowsE).filter(
+      (t) => isBank(t) && !t.bankTxId && now - (Number(t.expiredAt) || 0) < cfg.lateGraceMs,
+    );
+    // طلبات نُقلت للمراجعة اليدوية بسبب انقطاع Gmail — تُقبل تلقائياً إن عاد الاتصال ووُجد التحويل
+    const lateManual = rows(rowsP).filter(
+      (t) => isBank(t) && t.manualReason && !t.bankTxId && now - (Number(t.manualReviewAt) || 0) < cfg.lateGraceMs * 24,
+    );
+    const pending = [...verifying, ...lateExpired, ...lateManual].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
 
     if (!pending.length) {
       await heartbeat({ pendingCount: 0, lastError: "" });
@@ -223,7 +251,8 @@ export async function tick() {
     let candidates = [];
     let gmailError = "";
     try {
-      const r = await loadCandidates();
+      const oldest = Math.min(...pending.map((t) => Number(t.createdAt) || now));
+      const r = await loadCandidates(oldest - cfg.lookbackMs);
       candidates = r.list.sort((a, b) => a.receivedAt - b.receivedAt);
       if (!r.connected) gmailError = "Gmail غير مرتبط";
     } catch (e) {
@@ -248,8 +277,11 @@ export async function tick() {
         usedIds.add(m.id);
       }
       if (done) continue;
-      if (t.status === "verifying" && now > deadline)
-        await expire(t).catch((e) => console.error("[verify] expire failed", e?.message));
+      if (t.status === "verifying" && now > deadline) {
+        // Gmail لا يعمل → لا نرفض العميل؛ ننقله للمراجعة اليدوية
+        if (gmailError) await toManualReview(t, gmailError).catch((e) => console.error("[verify] manual failed", e?.message));
+        else await expire(t).catch((e) => console.error("[verify] expire failed", e?.message));
+      }
     }
     await heartbeat({ pendingCount: verifying.length, lastError: gmailError });
   } catch (e) {
@@ -258,6 +290,7 @@ export async function tick() {
   } finally {
     ticking = false;
   }
+  return true;
 }
 
 /** تشغيل فوري (مثلاً بعد إنشاء طلب جديد) مع منع التكرار. */

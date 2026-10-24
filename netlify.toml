@@ -9,6 +9,9 @@
   SECRETS_SCAN_ENABLED = "false"
   NODE_VERSION = "22"
 
+[functions]
+  node_bundler = "esbuild"
+
 [[redirects]]
   from = "/api/*"
   to = "/api/:splat"
