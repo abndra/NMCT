@@ -36,6 +36,7 @@ import {
   type GmailCheck,
   type ServerStatus,
   type UsedBankTx,
+  isBuiltInBank,
 } from "@/lib/bank-verify";
 
 const inputCls =
@@ -102,9 +103,13 @@ export function BankVerifyPanel() {
     window.history.replaceState({}, "", window.location.pathname + (q.toString() ? "?" + q : ""));
   }, []);
 
-  const configured = Boolean(cfg.url && cfg.token);
-  const running = Boolean(state.lastPollAt && now - state.lastPollAt < 90_000);
+  const configured = Boolean(cfg.token);
+  const builtIn = isBuiltInBank(cfg.url);
+  // الدالة المجدولة تفحص كل دقيقة ← نعتبرها متوقفة فقط بعد 3 دقائق بلا فحص
+  const running = Boolean(state.lastPollAt && now - state.lastPollAt < 180_000);
   const gmail = state.gmail || {};
+  const errText = state.lastError || gmail.error || "";
+  const tokenExpired = /invalid_grant/i.test(errText);
   const dt = (ts?: number) => (ts ? new Date(ts).toLocaleString(ar ? "ar-OM" : "en-GB") : "—");
 
   async function save() {
@@ -159,7 +164,7 @@ export function BankVerifyPanel() {
       const m = e instanceof Error ? e.message : "";
       toast.error(
         m.startsWith("missing:")
-          ? (ar ? "متغيرات ناقصة على Railway: " : "Missing Railway variables: ") + m.slice(8)
+          ? (ar ? "متغيرات ناقصة في إعدادات Netlify: " : "Missing environment variables: ") + m.slice(8)
           : m === "token"
             ? ar
               ? "التوكن غير مطابق"
@@ -229,10 +234,32 @@ export function BankVerifyPanel() {
         />
       </div>
 
-      {(state.lastError || gmail.error) && (
-        <p className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-          ⚠️ {state.lastError || gmail.error}
-        </p>
+      {errText && (
+        <div className="space-y-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+          <p>⚠️ {errText}</p>
+          {tokenExpired && (
+            <div className="space-y-1 text-foreground">
+              <p className="font-display text-sm">
+                {ar ? "سبب المشكلة: انتهت صلاحية ربط Gmail" : "Cause: the Gmail link expired"}
+              </p>
+              <p className="text-muted-foreground">
+                {ar
+                  ? "تطبيق Google OAuth ما زال في وضع «Testing»، وGoogle تُلغي الربط تلقائياً بعد 7 أيام في هذا الوضع. الحل الدائم:"
+                  : "Your Google OAuth app is still in “Testing” mode, where Google revokes access after 7 days. Permanent fix:"}
+              </p>
+              <ol className="list-decimal space-y-0.5 ps-5 text-muted-foreground">
+                <li>{ar ? "افتح console.cloud.google.com ← Google Auth Platform ← Audience" : "Open console.cloud.google.com → Google Auth Platform → Audience"}</li>
+                <li>{ar ? "اضغط «Publish app» ثم «Confirm» لتصبح الحالة In production" : "Click “Publish app” → Confirm (status: In production)"}</li>
+                <li>{ar ? "ارجع هنا واضغط «ربط Gmail» مرة أخرى (اقبل تحذير «تطبيق غير موثّق» ← Advanced ← Continue)" : "Come back and press “Connect Gmail” again (accept the unverified-app warning)"}</li>
+              </ol>
+              <p className="text-muted-foreground">
+                {ar
+                  ? "حتى يتم إعادة الربط: طلبات الشحن لا تُرفض، بل تنتقل إلى «قيد المراجعة» في طلبات الشحن لتقبلها يدوياً، وتُقبل تلقائياً إذا أعدت الربط خلال 24 ساعة."
+                  : "Until relinked, top-ups are not rejected — they move to “Pending” for manual approval, and auto-approve if you relink within 24h."}
+              </p>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ------- إعداد الخدمة ------- */}
@@ -241,19 +268,27 @@ export function BankVerifyPanel() {
           <span className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
             <Server className="size-4" />
           </span>
-          <h2 className="font-display text-lg">{ar ? "خدمة التحقق (Railway)" : "Verification service (Railway)"}</h2>
+          <h2 className="font-display text-lg">
+            {builtIn
+              ? ar
+                ? "خدمة التحقق (مدمجة في Netlify)"
+                : "Verification service (built into Netlify)"
+              : ar
+                ? "خدمة التحقق (سيرفر خارجي)"
+                : "Verification service (external server)"}
+          </h2>
         </div>
         <p className="text-xs text-muted-foreground">
           {ar
-            ? "الصق رابط الخدمة بعد نشرها على Railway، والتوكن نفسه الذي وضعته في متغير TOKEN. التوكن يُحفظ في مسار يقرؤه الأدمن فقط."
-            : "Paste the Railway service URL and the same TOKEN you configured there. The token is stored admin-only."}
+            ? "الخدمة تعمل الآن داخل نفس موقع Netlify ولا تحتاج Railway. اترك خانة الرابط فارغة، وضع التوكن نفسه الذي وضعته في متغير TOKEN في إعدادات Netlify. التوكن يُحفظ في مسار يقرؤه الأدمن فقط."
+            : "The service now runs inside this Netlify site — no Railway needed. Leave the URL empty and enter the same TOKEN you set in Netlify environment variables."}
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <input
             value={cfg.url}
             onChange={(e) => setCfg({ ...cfg, url: e.target.value })}
             dir="ltr"
-            placeholder="https://nmct-bank-verify.up.railway.app"
+            placeholder={ar ? "اتركه فارغاً (الخدمة المدمجة)" : "Leave empty (built-in)"}
             className={inputCls}
           />
           <input
@@ -287,7 +322,7 @@ export function BankVerifyPanel() {
             </p>
             {!!srv.missingConfig?.length && (
               <p className="text-destructive sm:col-span-2">
-                ⚠️ {ar ? "متغيرات ناقصة على Railway:" : "Missing Railway variables:"} {srv.missingConfig.join(", ")}
+                ⚠️ {ar ? "متغيرات ناقصة في إعدادات Netlify:" : "Missing environment variables:"} {srv.missingConfig.join(", ")}
               </p>
             )}
           </div>
@@ -398,7 +433,11 @@ export function BankVerifyPanel() {
                   }`}
                 >
                   {l.kind === "verified" ? <CheckCircle2 className="size-3" /> : <XCircle className="size-3" />}
-                  {l.kind === "verified" ? (ar ? "تم التحقق" : "Verified") : ar ? "انتهت المهلة" : "Expired"}
+                  {l.kind === "verified"
+                    ? ar ? "تم التحقق" : "Verified"
+                    : l.kind === "manual"
+                      ? ar ? "للمراجعة اليدوية" : "Manual review"
+                      : ar ? "انتهت المهلة" : "Expired"}
                 </span>
                 <span className="font-tech">#{l.topupNo}</span>
                 <span className="font-tech text-primary">{omr3(l.amount, lang)}</span>
@@ -476,10 +515,10 @@ export function BankVerifyPanel() {
 
       {/* ------- تحميل الملفات ------- */}
       <div className={cardCls}>
-        <p className="font-display text-sm">{ar ? "ملفات نظام التحقق (Railway)" : "Verification system files (Railway)"}</p>
+        <p className="font-display text-sm">{ar ? "ملفات سيرفر خارجي (اختياري)" : "External server files (optional)"}</p>
         <p className="text-xs text-muted-foreground">
           {ar
-            ? "حمّل المشروع كاملاً (server.js, src/*, package.json, .env.example, README.md بالشرح خطوة بخطوة) وارفعه على GitHub ثم انشره على Railway. لا يحتوي أي أسرار — كل المفاتيح توضع في متغيرات البيئة."
+            ? "لم تعد تحتاج Railway — الخدمة مدمجة في Netlify. هذه الملفات فقط لمن يريد تشغيلها على سيرفر مستقل. لا تحتوي أي أسرار."
             : "Download the full project (server.js, src/*, package.json, .env.example, README.md with a step-by-step guide), push it to GitHub and deploy on Railway. It contains no secrets — everything goes in environment variables."}
         </p>
         <button
@@ -559,18 +598,6 @@ function VariablesGuide({ ar, redirectUri, missing }: { ar: boolean; redirectUri
       where: { ar: "نفس صفحة Credentials في Google Cloud", en: "Same Google Cloud Credentials page" },
     },
     {
-      name: "PUBLIC_URL",
-      descAr: "رابط خدمتك العام على Railway بدون / في النهاية، مثال: https://xxxx.up.railway.app",
-      descEn: "Your public Railway URL without trailing slash, e.g. https://xxxx.up.railway.app",
-      where: { ar: "Railway › Settings › Domains", en: "Railway › Settings › Domains" },
-    },
-    {
-      name: "SITE_URL",
-      descAr: "رابط الموقع الحالي (يُستخدم للرجوع بعد ربط Gmail وللسماح بالاتصال).",
-      descEn: "This site's URL (OAuth return + allowed origin).",
-      where: { ar: "انسخ رابط موقعك من المتصفح", en: "Copy your site URL from the browser" },
-    },
-    {
       name: "FIREBASE_DB_URL",
       descAr: "رابط قاعدة البيانات، مثال: https://xxxx-default-rtdb.firebaseio.com",
       descEn: "Realtime Database URL, e.g. https://xxxx-default-rtdb.firebaseio.com",
@@ -601,7 +628,7 @@ function VariablesGuide({ ar, redirectUri, missing }: { ar: boolean; redirectUri
 
       {!!missing?.length && (
         <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-400">
-          ⚠️ {ar ? "لهذا السبب يظهر «تعذر بدء الربط» — المتغيرات التالية ناقصة على Railway: " : "This is why linking fails — missing on Railway: "}
+          ⚠️ {ar ? "لهذا السبب يظهر «تعذر بدء الربط» — المتغيرات التالية ناقصة في Netlify: " : "This is why linking fails — missing in Netlify: "}
           <span dir="ltr" className="font-tech">{missing.join(", ")}</span>
         </p>
       )}
@@ -609,21 +636,26 @@ function VariablesGuide({ ar, redirectUri, missing }: { ar: boolean; redirectUri
       <div className="space-y-2 text-xs text-muted-foreground">
         <p className="font-semibold text-foreground">{ar ? "كيف أضيف المتغيرات؟" : "How do I add variables?"}</p>
         <ol className="list-decimal space-y-1 ps-5">
-          <li>{ar ? "افتح مشروعك في Railway › اختر الخدمة › تبويب Variables." : "Open your Railway project › service › Variables tab."}</li>
-          <li>{ar ? "اضغط New Variable، اكتب الاسم تماماً كما في الجدول، والصق القيمة." : "Click New Variable, type the exact name, paste the value."}</li>
-          <li>{ar ? "بعد إضافة كل المتغيرات أعد النشر (Redeploy) ثم اضغط «فحص الاتصال» هنا." : "After adding all of them, redeploy, then press Test connection here."}</li>
+          <li>{ar ? "افتح موقعك في Netlify › Site configuration › Environment variables." : "Open your site in Netlify › Site configuration › Environment variables."}</li>
+          <li>{ar ? "اضغط Add a variable، اكتب الاسم تماماً كما في الجدول، والصق القيمة." : "Click Add a variable, type the exact name, paste the value."}</li>
+          <li>{ar ? "بعد إضافة كل المتغيرات: Deploys › Trigger deploy ثم اضغط «فحص الاتصال» هنا." : "After adding all of them: Deploys › Trigger deploy, then press Test connection here."}</li>
         </ol>
         <p className="font-semibold text-foreground">{ar ? "قبل ذلك: فعّل Gmail API وأنشئ عميل OAuth" : "Before that: enable Gmail API and create the OAuth client"}</p>
         <ol className="list-decimal space-y-1 ps-5">
           <li>{ar ? "console.cloud.google.com › أنشئ مشروعاً › APIs & Services › Library › فعّل Gmail API." : "console.cloud.google.com › create a project › Library › enable Gmail API."}</li>
-          <li>{ar ? "OAuth consent screen › External › أكمل الإعداد وأضف بريدك كـ Test user." : "OAuth consent screen › External › finish setup and add your email as a Test user."}</li>
+          <li>{ar ? "OAuth consent screen › External › أكمل الإعداد." : "OAuth consent screen › External › finish setup."}</li>
+          <li className="font-semibold text-foreground">
+            {ar
+              ? "مهم جداً: Audience › Publish app › Confirm (الحالة In production). إذا بقي في وضع Testing تُلغي Google الربط كل 7 أيام ويتوقف التحقق (خطأ invalid_grant)."
+              : "Very important: Audience › Publish app › Confirm (In production). In Testing mode Google revokes access every 7 days (invalid_grant)."}
+          </li>
           <li>
             {ar ? "Credentials › Create OAuth client ID (Web) › أضف Redirect URI التالي بالضبط:" : "Credentials › Create OAuth client ID (Web) › add exactly this Redirect URI:"}
             <span dir="ltr" className="mt-1 block select-all rounded-lg border border-border bg-background/60 p-2 font-tech text-foreground">
-              {redirectUri || "https://<your-service>.up.railway.app/oauth/google/callback"}
+              {redirectUri || (typeof window !== "undefined" ? window.location.origin : "https://<your-site>.netlify.app") + "/bank-api/oauth/google/callback"}
             </span>
           </li>
-          <li>{ar ? "انسخ Client ID و Client Secret إلى متغيرات Railway." : "Copy Client ID and Client Secret into Railway variables."}</li>
+          <li>{ar ? "انسخ Client ID و Client Secret إلى متغيرات Netlify." : "Copy Client ID and Client Secret into Netlify variables."}</li>
         </ol>
       </div>
 
